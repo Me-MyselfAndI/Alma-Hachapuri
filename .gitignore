@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+# Python venv
+backend/.venv/
+.env
+
+# Node
+node_modules/
+.next/
+out/
+
+# Uploads & local data
+uploads/
+*.db
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

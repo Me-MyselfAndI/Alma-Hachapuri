@@ -12,6 +12,7 @@ import type { LeadListItem, LeadState, Paginated } from "@/lib/types";
 import { LeadFilters } from "./LeadFilters";
 import { LeadPagination } from "./LeadPagination";
 import { LeadTable } from "./LeadTable";
+import { FadeIn } from "@/components/ui/fade-in";
 
 const VALID_STATES = new Set<LeadState>([
   "PENDING",
@@ -159,14 +160,20 @@ export function LeadListPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
+      <FadeIn>
+        <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground">
+          Leads
+        </h1>
+      </FadeIn>
 
-      <LeadFilters
-        state={state}
-        mine={mine}
-        onStateChange={handleStateChange}
-        onMineChange={handleMineChange}
-      />
+      <FadeIn delay={1}>
+        <LeadFilters
+          state={state}
+          mine={mine}
+          onStateChange={handleStateChange}
+          onMineChange={handleMineChange}
+        />
+      </FadeIn>
 
       {forbidden ? (
         <Alert variant="destructive">
@@ -190,8 +197,9 @@ export function LeadListPage() {
       ) : null}
 
       {!forbidden && !error ? (
-        <>
-          <LeadTable items={items} loading={loading} />
+        <FadeIn delay={2} variant="fade">
+          <>
+            <LeadTable items={items} loading={loading} />
 
           {!loading && items.length === 0 ? (
             <Alert>
@@ -225,7 +233,8 @@ export function LeadListPage() {
               onPageChange={handlePageChange}
             />
           ) : null}
-        </>
+          </>
+        </FadeIn>
       ) : null}
     </div>
   );

@@ -21,7 +21,7 @@ export function LeadTableRow({ lead }: LeadTableRowProps) {
 
   return (
     <TableRow
-      className="cursor-pointer"
+      className="cursor-pointer transition-colors hover:bg-accent/50"
       onClick={() => router.push(`/leads/${lead.id}`)}
       tabIndex={0}
       onKeyDown={(event) => {

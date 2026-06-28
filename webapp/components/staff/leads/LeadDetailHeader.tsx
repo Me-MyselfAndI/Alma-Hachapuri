@@ -13,7 +13,9 @@ export function LeadDetailHeader({ lead }: LeadDetailHeaderProps) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{fullName}</h1>
+        <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground">
+          {fullName}
+        </h1>
         <LeadStateBadge state={lead.state} />
       </div>
       <p className="text-muted-foreground">{lead.email}</p>

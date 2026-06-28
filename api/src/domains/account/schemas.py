@@ -89,6 +89,18 @@ class AccountRead(BaseModel):
     updated_at: datetime
 
 
+class AssignableAccountSummary(BaseModel):
+    """Active attorney/intake accounts eligible for lead assignment."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    first_name: str
+    last_name: str
+    work_email: EmailStr | None = None
+    email: EmailStr
+
+
 class AccountMe(AccountRead):
     """A2 — ``AccountRead`` + the caller's permission keys."""
 

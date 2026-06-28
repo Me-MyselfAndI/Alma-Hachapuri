@@ -5,10 +5,10 @@ import { StaffShell } from "@/components/staff/shell/StaffShell";
 import { PageLoader } from "@/components/ui/page-loader";
 
 function SessionFallback() {
-  return <PageLoader label="Loading dashboard…" fullScreen />;
+  return <PageLoader label="Loading admin…" fullScreen />;
 }
 
-export default function LeadsLayout({
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;

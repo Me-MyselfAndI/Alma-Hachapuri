@@ -39,7 +39,16 @@ export function LeadFilters({
           }
         >
           <SelectTrigger id="state-filter" className="w-[180px]">
-            <SelectValue placeholder="All states" />
+            <SelectValue placeholder="All states">
+              {(value) =>
+                value === "ALL"
+                  ? "All states"
+                  : value != null
+                    ? LEAD_STATE_OPTIONS.find((o) => o.value === value)?.label ??
+                      String(value)
+                    : null
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All states</SelectItem>

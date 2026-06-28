@@ -114,6 +114,62 @@ class TestLeadRouteRbac:
         assert response.status_code == 403
 
 
+class TestLeadAssigneesAndReassignment:
+    def test_list_assignable_requires_assign_lead(self, role_client) -> None:
+        attorney_client, _ = role_client(Role.ATTORNEY, email="attorney@firm.com")
+
+        response = attorney_client.get("/api/v1/accounts/assignable")
+
+        assert response.status_code == 403
+
+    def test_admin_lists_assignable_accounts(self, role_client) -> None:
+        _, first = role_client(
+            Role.ATTORNEY,
+            email="first@firm.com",
+            is_default_assignee=True,
+        )
+        role_client(
+            Role.ATTORNEY,
+            email="second@firm.com",
+            is_default_assignee=False,
+        )
+        admin_client, _ = role_client(Role.ADMIN, email="admin@firm.com")
+
+        response = admin_client.get("/api/v1/accounts/assignable")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) >= 2
+        ids = {item["id"] for item in body}
+        assert str(first.id) in ids
+
+    def test_admin_can_reassign_lead(self, role_client, db_session) -> None:
+        _, first = role_client(
+            Role.ATTORNEY,
+            email="first@firm.com",
+            is_default_assignee=True,
+        )
+        _, second = role_client(
+            Role.ATTORNEY,
+            email="second@firm.com",
+            is_default_assignee=False,
+        )
+        admin_client, _ = role_client(Role.ADMIN, email="admin@firm.com")
+        lead = _seed_lead(db_session, assignee_id=first.id)
+
+        response = admin_client.patch(
+            f"/api/v1/leads/{lead.id}",
+            json={"assigned_account_id": str(second.id)},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["assigned_account_id"] == str(second.id)
+
+        refreshed = db_session.get(Lead, lead.id)
+        assert refreshed is not None
+        assert refreshed.assigned_account_id == second.id
+
+
 class TestVerificationRequestRateLimit:
     @patch("src.domains.lead.service.EmailService.send_verification_email")
     def test_exceeding_limit_returns_429(self, mock_send, client, monkeypatch) -> None:

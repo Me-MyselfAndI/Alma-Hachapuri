@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { PageLoader } from "@/components/ui/page-loader";
 
 import type { AccountMe } from "@/lib/types";
 
@@ -79,14 +79,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
   }, [currentPath, refresh, router]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2
-          className="size-8 animate-spin text-muted-foreground"
-          aria-label="Loading session"
-        />
-      </div>
-    );
+    return <PageLoader label="Loading your session…" fullScreen />;
   }
 
   if (!user) {

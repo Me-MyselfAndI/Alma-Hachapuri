@@ -17,9 +17,9 @@ const badgeVariants = cva(
         muted:
           "border-transparent bg-muted text-muted-foreground [a&]:hover:bg-muted/80",
         warning:
-          "border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100",
+          "border-transparent bg-violet-100 text-violet-900 dark:bg-violet-950/80 dark:text-violet-100",
         success:
-          "border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100",
+          "border-transparent bg-emerald-100/90 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100",
       },
     },
     defaultVariants: {

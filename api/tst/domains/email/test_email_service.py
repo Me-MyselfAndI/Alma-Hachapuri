@@ -372,7 +372,7 @@ class TestSendTemplate:
     def test_staff_send_accepts_subject_and_body_overrides(
         self, mock_smtp: MagicMock, db_session: Session
     ) -> None:
-        lead = _make_lead(db_session, first_name="Jane")
+        lead = _make_lead(db_session)
         notification = EmailService.send_template(
             db_session,
             lead_id=lead.id,
@@ -403,7 +403,7 @@ class TestPreviewStaffEmail:
     def test_preview_follow_up_includes_lead_first_name(
         self, db_session: Session
     ) -> None:
-        lead = _make_lead(db_session, first_name="Jane")
+        lead = _make_lead(db_session)
         subject, body = EmailService.preview_staff_email(
             db_session, lead_id=lead.id, template="prospect_follow_up"
         )

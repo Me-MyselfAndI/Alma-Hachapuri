@@ -6,9 +6,14 @@ import { useCallback, useEffect, useState, startTransition } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useSession } from "@/components/auth/SessionProvider";
+import { LeadAssigneePanel } from "@/components/staff/leads/LeadAssigneePanel";
 import { LeadDetailCards } from "@/components/staff/leads/LeadDetailCards";
 import { LeadDetailHeader } from "@/components/staff/leads/LeadDetailHeader";
+import { LeadEmailLogPanel } from "@/components/staff/leads/LeadEmailLogPanel";
+import { LeadEmailPanel } from "@/components/staff/leads/LeadEmailPanel";
+import { LeadStateHistoryPanel } from "@/components/staff/leads/LeadStateHistoryPanel";
 import { LeadTransitionPanel } from "@/components/staff/leads/LeadTransitionPanel";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,9 +55,7 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
   const [pageError, setPageError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [transitionError, setTransitionError] = useState<string | null>(null);
-  const [transitioningTo, setTransitioningTo] = useState<LeadState | null>(
-    null,
-  );
+  const [transitioning, setTransitioning] = useState(false);
 
   const loadLead = useCallback(async () => {
     setLoading(true);
@@ -105,10 +108,10 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
   };
 
   const handleTransition = async (toState: LeadState) => {
-    if (!lead) return;
+    if (!lead || !user) return;
 
     setTransitionError(null);
-    setTransitioningTo(toState);
+    setTransitioning(true);
 
     const payload: { to_state: LeadState; note?: string } = { to_state: toState };
     const trimmedNote = note.trim();
@@ -128,7 +131,7 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
 
     if (result.status === 403) {
       setTransitionError(getTransitionForbiddenMessage(user, lead));
-      setTransitioningTo(null);
+      setTransitioning(false);
       return;
     }
 
@@ -139,13 +142,13 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
           result.ok ? undefined : result.body,
         ),
       );
-      setTransitioningTo(null);
+      setTransitioning(false);
       return;
     }
 
     setLead(result.data);
     setNote("");
-    setTransitioningTo(null);
+    setTransitioning(false);
   };
 
   return (
@@ -181,19 +184,36 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
         </Alert>
       ) : null}
 
-      {!loading && lead ? (
-        <>
-          <LeadDetailHeader lead={lead} />
-          <LeadDetailCards lead={lead} />
-          <LeadTransitionPanel
-            lead={lead}
-            note={note}
-            onNoteChange={setNote}
-            onTransition={handleTransition}
-            transitioningTo={transitioningTo}
-            error={transitionError}
-          />
-        </>
+      {!loading && lead && user ? (
+        <FadeIn variant="fade">
+          <>
+            <LeadDetailHeader lead={lead} />
+            <LeadDetailCards lead={lead} />
+            <LeadAssigneePanel
+              lead={lead}
+              user={user}
+              onLeadUpdated={setLead}
+            />
+            <div className="grid gap-6 lg:grid-cols-2">
+              <LeadEmailPanel lead={lead} user={user} />
+              <LeadTransitionPanel
+                lead={lead}
+                note={note}
+                onNoteChange={setNote}
+                onTransition={handleTransition}
+                transitioning={transitioning}
+                error={transitionError}
+              />
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <LeadStateHistoryPanel
+                leadId={lead.id}
+                refreshKey={lead.state_changed_at}
+              />
+              <LeadEmailLogPanel leadId={lead.id} user={user} />
+            </div>
+          </>
+        </FadeIn>
       ) : null}
     </div>
   );

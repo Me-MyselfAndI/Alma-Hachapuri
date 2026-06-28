@@ -7,7 +7,7 @@ export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
 
-  if (pathname.startsWith("/leads") && !token) {
+  if ((pathname.startsWith("/leads") || pathname.startsWith("/admin")) && !token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname + search);
     return NextResponse.redirect(loginUrl);
@@ -27,5 +27,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/leads/:path*", "/login", "/api/v1/:path*"],
+  matcher: ["/leads/:path*", "/admin/:path*", "/login", "/api/v1/:path*"],
 };

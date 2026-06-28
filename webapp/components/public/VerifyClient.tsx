@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FadeIn } from "@/components/ui/fade-in";
+import { PageLoader } from "@/components/ui/page-loader";
 import { formatVerifyError, publicFetch } from "@/lib/api-client";
 import type { LeadCreateResponse } from "@/lib/types";
 
@@ -78,45 +80,46 @@ export function VerifyClient({ token }: VerifyClientProps) {
   }, [token]);
 
   if (state.kind === "loading") {
-    return (
-      <Alert>
-        <AlertTitle>Verifying your email</AlertTitle>
-        <AlertDescription>Please wait while we confirm your submission…</AlertDescription>
-      </Alert>
-    );
+    return <PageLoader label="Verifying your email…" />;
   }
 
   if (state.kind === "missing-token") {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Invalid link</AlertTitle>
-        <AlertDescription>
-          Verification link is missing or invalid. Open the link from your email,
-          or submit the form again.
-        </AlertDescription>
-      </Alert>
+      <FadeIn variant="scale">
+        <Alert variant="destructive">
+          <AlertTitle>Invalid link</AlertTitle>
+          <AlertDescription>
+            Verification link is missing or invalid. Open the link from your email,
+            or submit the form again.
+          </AlertDescription>
+        </Alert>
+      </FadeIn>
     );
   }
 
   if (state.kind === "success") {
     return (
-      <Alert>
-        <AlertTitle>Thank you</AlertTitle>
-        <AlertDescription>
-          {state.data.message} Your reference id is{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-sm">
-            {state.data.id}
-          </code>
-          .
-        </AlertDescription>
-      </Alert>
+      <FadeIn variant="scale">
+        <Alert>
+          <AlertTitle>Thank you</AlertTitle>
+          <AlertDescription>
+            {state.data.message} Your reference id is{" "}
+            <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm">
+              {state.data.id}
+            </code>
+            .
+          </AlertDescription>
+        </Alert>
+      </FadeIn>
     );
   }
 
   return (
-    <Alert variant="destructive">
-      <AlertTitle>Verification failed</AlertTitle>
-      <AlertDescription>{state.message}</AlertDescription>
-    </Alert>
+    <FadeIn variant="scale">
+      <Alert variant="destructive">
+        <AlertTitle>Verification failed</AlertTitle>
+        <AlertDescription>{state.message}</AlertDescription>
+      </Alert>
+    </FadeIn>
   );
 }

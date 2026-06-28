@@ -34,7 +34,8 @@ function LoadingRows() {
 
 export function LeadTable({ items, loading }: LeadTableProps) {
   return (
-    <Table>
+    <div className="surface-card overflow-hidden rounded-xl">
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
@@ -53,5 +54,6 @@ export function LeadTable({ items, loading }: LeadTableProps) {
         )}
       </TableBody>
     </Table>
+    </div>
   );
 }

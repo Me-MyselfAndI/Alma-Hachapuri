@@ -19,6 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.deps import get_current_account, get_db, require_permission
@@ -31,6 +32,7 @@ from src.domains.account.schemas import (
     AccountPasswordUpdate,
     AccountRead,
     AccountUpdate,
+    AssignableAccountSummary,
     Paginated,
     TokenResponse,
 )
@@ -170,6 +172,30 @@ def list_accounts(
         page=page,
         page_size=page_size,
     )
+
+
+@accounts_router.get(
+    "/assignable",
+    response_model=list[AssignableAccountSummary],
+    summary="ListAssignableAccounts",
+)
+def list_assignable_accounts(
+    db: Session = Depends(get_db),
+    _account: Any = Depends(require_permission("assign_lead")),
+) -> list[AssignableAccountSummary]:
+    """Active attorneys and intake coordinators eligible for lead assignment."""
+
+    accounts = db.scalars(
+        select(Account)
+        .where(
+            Account.is_active.is_(True),
+            Account.role.in_(
+                (Role.ATTORNEY.value, Role.INTAKE_COORDINATOR.value),
+            ),
+        )
+        .order_by(Account.last_name.asc(), Account.first_name.asc())
+    )
+    return [AssignableAccountSummary.model_validate(account) for account in accounts]
 
 
 @accounts_router.get(

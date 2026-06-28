@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatApiError, publicFetch } from "@/lib/api-client";
@@ -97,7 +98,9 @@ export function SubmitForm() {
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <Card>
+      <CardContent className="pt-6">
+        <form className="space-y-5" onSubmit={handleSubmit}>
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Submission failed</AlertTitle>
@@ -156,9 +159,11 @@ export function SubmitForm() {
         />
       </div>
 
-      <Button type="submit" disabled={submitting}>
+      <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
         {submitting ? "Submitting…" : "Submit"}
       </Button>
-    </form>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

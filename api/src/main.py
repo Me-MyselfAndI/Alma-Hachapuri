@@ -18,9 +18,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from src.core.config import settings
 from src.core.database import SessionLocal
+from src.core.rate_limit import limiter
 from src.domains.account.router import accounts_router, auth_router
 from src.domains.account.service import SeedService
 from src.domains.email.router import emails_router, lead_emails_router
@@ -50,6 +53,8 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

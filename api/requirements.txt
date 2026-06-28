@@ -11,6 +11,7 @@ bcrypt<4.1  # pin: passlib 1.7.4 wrap-bug detection breaks on bcrypt >=4.1
 python-multipart>=0.0.17
 pydantic-settings>=2.6.0
 email-validator>=2.2.0
+slowapi>=0.1.9
 
 # Dev / test
 httpx>=0.28.0

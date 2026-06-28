@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Set to true to skip the startup seed (tests bypass via patched SessionLocal).
     disable_startup_seed: bool = False
 
+    # Public form abuse protection — POST /api/v1/leads/verification-requests
+    rate_limit_enabled: bool = True
+    verification_request_rate_limit: str = "5/minute"
+
     @model_validator(mode="after")
     def _resolve_uploads_dir(self) -> Self:
         resolved = resolve_from_root(self.uploads_dir, root=_REPO_ROOT)

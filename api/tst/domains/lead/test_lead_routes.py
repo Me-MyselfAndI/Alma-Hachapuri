@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
@@ -111,6 +112,31 @@ class TestLeadRouteRbac:
         )
 
         assert response.status_code == 403
+
+
+class TestVerificationRequestRateLimit:
+    @patch("src.domains.lead.service.EmailService.send_verification_email")
+    def test_exceeding_limit_returns_429(self, mock_send, client, monkeypatch) -> None:
+        mock_send.return_value = None
+        from src.core.rate_limit import limiter
+
+        monkeypatch.setattr("src.core.config.settings.rate_limit_enabled", True)
+        monkeypatch.setattr("src.core.config.settings.verification_request_rate_limit", "2/minute")
+        limiter.enabled = True
+
+        payload = {
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+        }
+        files = {"resume": ("cv.pdf", b"%PDF-1.4", "application/pdf")}
+
+        assert client.post("/api/v1/leads/verification-requests", data=payload, files=files).status_code == 202
+        assert client.post("/api/v1/leads/verification-requests", data=payload, files=files).status_code == 202
+        response = client.post("/api/v1/leads/verification-requests", data=payload, files=files)
+
+        assert response.status_code == 429
+        limiter.enabled = False
 
 
 class TestVerificationRequestRoute:

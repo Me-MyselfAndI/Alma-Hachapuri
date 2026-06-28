@@ -36,8 +36,12 @@ from src.main import app
 # in-memory SQLite session directly.
 import os
 os.environ.setdefault("DISABLE_STARTUP_SEED", "true")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 from src.core import config as _config
 _config.settings.disable_startup_seed = True
+_config.settings.rate_limit_enabled = False
+from src.core.rate_limit import limiter as _limiter
+_limiter.enabled = False
 
 
 @compiles(PgUUID, "sqlite")

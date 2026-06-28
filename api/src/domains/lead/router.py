@@ -16,6 +16,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import settings
 from src.core.deps import get_db, require_permission
+from src.core.rate_limit import limiter
 from src.domains.account.models import Account
 from src.domains.account.schemas import Paginated
 from src.domains.lead.enrichment import schedule_lead_enrichment
@@ -48,6 +50,10 @@ from src.domains.prospect.schemas import ProspectSummary
 from src.domains.resume_file.models import ResumeFile
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
+
+
+def _verification_request_rate_limit() -> str:
+    return settings.verification_request_rate_limit
 
 
 def _build_lead_read(db: Session, lead: Lead) -> LeadRead:
@@ -146,7 +152,9 @@ def _build_list_item(lead: Lead, assignee_names: dict[UUID, str]) -> LeadListIte
     status_code=status.HTTP_202_ACCEPTED,
     summary="RequestLeadVerification (L1a)",
 )
+@limiter.limit(_verification_request_rate_limit)
 def request_lead_verification(
+    request: Request,
     first_name: str = Form(...),
     last_name: str = Form(...),
     email: str = Form(...),

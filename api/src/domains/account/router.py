@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.deps import get_current_account, get_db, require_permission
-from src.core.permissions import Role, permissions_for_role
+from src.core.permissions import Role, account_has_permission, permissions_for_role
 from src.domains.account.models import Account
 from src.domains.account.schemas import (
     AccountCreate,
@@ -32,7 +32,6 @@ from src.domains.account.schemas import (
     AccountPasswordUpdate,
     AccountRead,
     AccountUpdate,
-    AssignableAccountSummary,
     Paginated,
     TokenResponse,
 )
@@ -160,9 +159,41 @@ def list_accounts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     role: Role | None = Query(None),
+    for_assignment: bool = Query(
+        False,
+        description="When true, list active attorneys for assignment (requires assign_lead).",
+    ),
     db: Session = Depends(get_db),
-    _admin: Any = Depends(require_permission("manage_users")),
+    account: Account = Depends(get_current_account),
 ) -> Paginated[AccountRead]:
+    if for_assignment:
+        if not account_has_permission(account, "assign_lead"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        stmt = (
+            select(Account)
+            .where(
+                Account.is_active.is_(True),
+                Account.role == Role.ATTORNEY.value,
+            )
+            .order_by(Account.last_name.asc(), Account.first_name.asc())
+        )
+        assignable = list(db.scalars(stmt))
+        return Paginated[AccountRead](
+            items=[AccountRead.model_validate(a) for a in assignable],
+            total=len(assignable),
+            page=1,
+            page_size=max(len(assignable), 1),
+        )
+
+    if not account_has_permission(account, "manage_users"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
     items, total = AccountService.list_accounts(
         db, page=page, page_size=page_size, role=role
     )
@@ -172,30 +203,6 @@ def list_accounts(
         page=page,
         page_size=page_size,
     )
-
-
-@accounts_router.get(
-    "/assignable",
-    response_model=list[AssignableAccountSummary],
-    summary="ListAssignableAccounts",
-)
-def list_assignable_accounts(
-    db: Session = Depends(get_db),
-    _account: Any = Depends(require_permission("assign_lead")),
-) -> list[AssignableAccountSummary]:
-    """Active attorneys and intake coordinators eligible for lead assignment."""
-
-    accounts = db.scalars(
-        select(Account)
-        .where(
-            Account.is_active.is_(True),
-            Account.role.in_(
-                (Role.ATTORNEY.value, Role.INTAKE_COORDINATOR.value),
-            ),
-        )
-        .order_by(Account.last_name.asc(), Account.first_name.asc())
-    )
-    return [AssignableAccountSummary.model_validate(account) for account in accounts]
 
 
 @accounts_router.get(

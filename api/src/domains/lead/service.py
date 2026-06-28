@@ -416,10 +416,10 @@ class LeadService:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="Invalid assignee account",
                 )
-            if account.role not in (Role.ATTORNEY.value, Role.INTAKE_COORDINATOR.value):
+            if account.role != Role.ATTORNEY.value:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Assignee must have an assignable role",
+                    detail="Assignee must be an attorney",
                 )
             lead.assigned_account_id = update.assigned_account_id
 

@@ -118,7 +118,7 @@ class TestLeadAssigneesAndReassignment:
     def test_list_assignable_requires_assign_lead(self, role_client) -> None:
         attorney_client, _ = role_client(Role.ATTORNEY, email="attorney@firm.com")
 
-        response = attorney_client.get("/api/v1/accounts/assignable")
+        response = attorney_client.get("/api/v1/accounts?for_assignment=true")
 
         assert response.status_code == 403
 
@@ -135,12 +135,12 @@ class TestLeadAssigneesAndReassignment:
         )
         admin_client, _ = role_client(Role.ADMIN, email="admin@firm.com")
 
-        response = admin_client.get("/api/v1/accounts/assignable")
+        response = admin_client.get("/api/v1/accounts?for_assignment=true")
 
         assert response.status_code == 200
         body = response.json()
-        assert len(body) >= 2
-        ids = {item["id"] for item in body}
+        assert len(body["items"]) >= 2
+        ids = {item["id"] for item in body["items"]}
         assert str(first.id) in ids
 
     def test_admin_can_reassign_lead(self, role_client, db_session) -> None:

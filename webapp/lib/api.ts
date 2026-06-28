@@ -29,6 +29,8 @@ export async function serverFetch(
   }
   if (json !== undefined) {
     headers["Content-Type"] = "application/json";
+  } else if (body !== undefined && typeof body === "string") {
+    headers["Content-Type"] = "application/json";
   }
 
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;

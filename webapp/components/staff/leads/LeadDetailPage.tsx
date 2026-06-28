@@ -185,34 +185,28 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
       ) : null}
 
       {!loading && lead && user ? (
-        <FadeIn variant="fade">
-          <>
-            <LeadDetailHeader lead={lead} />
-            <LeadDetailCards lead={lead} />
-            <LeadAssigneePanel
+        <FadeIn variant="fade" className="space-y-6">
+          <LeadDetailHeader lead={lead} />
+          <LeadDetailCards lead={lead} />
+          <LeadAssigneePanel lead={lead} user={user} onLeadUpdated={setLead} />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <LeadEmailPanel lead={lead} user={user} />
+            <LeadTransitionPanel
               lead={lead}
-              user={user}
-              onLeadUpdated={setLead}
+              note={note}
+              onNoteChange={setNote}
+              onTransition={handleTransition}
+              transitioning={transitioning}
+              error={transitionError}
             />
-            <div className="grid gap-6 lg:grid-cols-2">
-              <LeadEmailPanel lead={lead} user={user} />
-              <LeadTransitionPanel
-                lead={lead}
-                note={note}
-                onNoteChange={setNote}
-                onTransition={handleTransition}
-                transitioning={transitioning}
-                error={transitionError}
-              />
-            </div>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <LeadStateHistoryPanel
-                leadId={lead.id}
-                refreshKey={lead.state_changed_at}
-              />
-              <LeadEmailLogPanel leadId={lead.id} user={user} />
-            </div>
-          </>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <LeadStateHistoryPanel
+              leadId={lead.id}
+              refreshKey={lead.state_changed_at}
+            />
+            <LeadEmailLogPanel leadId={lead.id} user={user} />
+          </div>
         </FadeIn>
       ) : null}
     </div>

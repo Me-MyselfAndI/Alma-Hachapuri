@@ -159,7 +159,9 @@ Readable operation names for data/state rules. Route IDs (A1, S3, …) stay in t
 
 **Errors:** 401 invalid credentials; 403 if `is_active=false`.
 
-**JWT claims:** `sub` (account_id), `role`, `permissions` (computed from `ROLE_PERMISSIONS`), `exp`.
+**JWT claims:** `sub` (account_id), `role`, `permissions` (computed from `ROLE_PERMISSIONS` at login), `exp`.
+
+**Authorization note:** Protected routes use `require_permission`, which loads the account from the DB and checks **`account.role`** against `ROLE_PERMISSIONS`. JWT `permissions[]` is included for **frontend convenience** (`GET /auth/me`, UI gating) — stale permissions in an old token do **not** grant extra API access after a role change.
 
 ---
 

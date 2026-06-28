@@ -7,29 +7,31 @@ Intake submission — core entity. Holds form data, workflow state, assignment, 
 ## Purpose
 
 - Persist each prospect form submission
-- Track state (7-state lifecycle — F2.1 confirmed)
+- Track state (5-state lifecycle — F2.1 confirmed)
 - Link to prospect, resume, assigned account (attorney-role)
 
 ---
 
 ## Table: `leads`
 
-| Column | Type | Required | Notes |
-|--------|------|----------|-------|
-| `id` | UUID | PK | |
-| `prospect_id` | UUID | FK → `prospects.id` | |
-| `first_name` | VARCHAR(100) | yes | Denormalized from form at submit time |
-| `last_name` | VARCHAR(100) | yes | |
-| `email` | VARCHAR(255) | yes | Denormalized — snapshot at submit |
-| `resume_file_id` | UUID | FK → `resume_files.id` | |
-| `state` | VARCHAR(50) | yes | Default `PENDING`. See lifecycle below |
-| `state_changed_at` | TIMESTAMPTZ | yes | Set on create and on every state change; powers "how long waiting / going cold" (replaces the old `IN_CONTACT`/`ON_HOLD` states) |
-| `source` | VARCHAR(100) | no | Optional attribution (A7) |
-| `custom_fields` | JSONB | no | LLM-extracted; null until enriched (F7.1) |
-| `assigned_account_id` | UUID | FK → `accounts.id` | Set on create (F6.1); assignee must have assignable role |
-| `archived_at` | TIMESTAMPTZ | no | Set by L14; null = active |
-| `created_at` | TIMESTAMPTZ | yes | |
-| `updated_at` | TIMESTAMPTZ | yes | |
+
+| Column                | Type         | Required               | Notes                                                                                                                            |
+| --------------------- | ------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | UUID         | PK                     |                                                                                                                                  |
+| `prospect_id`         | UUID         | FK → `prospects.id`    |                                                                                                                                  |
+| `first_name`          | VARCHAR(100) | yes                    | Denormalized from form at submit time                                                                                            |
+| `last_name`           | VARCHAR(100) | yes                    |                                                                                                                                  |
+| `email`               | VARCHAR(255) | yes                    | Denormalized — snapshot at submit                                                                                                |
+| `resume_file_id`      | UUID         | FK → `resume_files.id` |                                                                                                                                  |
+| `state`               | VARCHAR(50)  | yes                    | Default `PENDING`. See lifecycle below                                                                                           |
+| `state_changed_at`    | TIMESTAMPTZ  | yes                    | Set on create and on every state change; powers "how long waiting / going cold" (replaces the old `IN_CONTACT`/`ON_HOLD` states) |
+| `source`              | VARCHAR(100) | no                     | Optional attribution (A7)                                                                                                        |
+| `custom_fields`       | JSONB        | no                     | LLM-extracted; null until enriched (F7.1)                                                                                        |
+| `assigned_account_id` | UUID         | FK → `accounts.id`     | Set on create (F6.1); assignee must have assignable role                                                                         |
+| `archived_at`         | TIMESTAMPTZ  | no                     | Set by L14; null = active                                                                                                        |
+| `created_at`          | TIMESTAMPTZ  | yes                    |                                                                                                                                  |
+| `updated_at`          | TIMESTAMPTZ  | yes                    |                                                                                                                                  |
+
 
 ---
 
@@ -37,15 +39,18 @@ Intake submission — core entity. Holds form data, workflow state, assignment, 
 
 The lifecycle is a **whose-turn-is-it ping-pong** plus a fit decision. The old `IN_CONTACT` / `ON_HOLD` states were removed: they only differed by *how long* a lead had been waiting, which is now derived from `state_changed_at` (no separate status needed).
 
-| State | Meaning (whose turn) | What triggers leaving it |
-|-------|----------------------|--------------------------|
-| `PENDING` | **Our turn** — new submission *or* the prospect just replied; we owe the next action (**brief**) | Staff contacts/responds → `REACHED_OUT`; or staff judges fit |
-| `REACHED_OUT` | **Their turn** — we contacted/responded; awaiting the prospect (**brief**) | Prospect replies → back to `PENDING`; or staff judges fit |
-| `QUALIFIED` | Staff decided **good fit**; moving toward engagement | Engagement concluded → `CLOSED` |
-| `DISQUALIFIED` | Staff decided **not a fit** / declined / out of scope / went cold | Closed out → `CLOSED` |
-| `CLOSED` | Terminal — resolved either way (won, lost, abandoned) | — |
+
+| State          | Meaning (whose turn)                                                                             | What triggers leaving it                                     |
+| -------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `PENDING`      | **Our turn** — new submission *or* the prospect just replied; we owe the next action (**brief**) | Staff contacts/responds → `REACHED_OUT`; or staff judges fit |
+| `REACHED_OUT`  | **Their turn** — we contacted/responded; awaiting the prospect (**brief**)                       | Prospect replies → back to `PENDING`; or staff judges fit    |
+| `QUALIFIED`    | Staff decided **good fit**; moving toward engagement                                             | Engagement concluded → `CLOSED`                              |
+| `DISQUALIFIED` | Staff decided **not a fit** / declined / out of scope / went cold                                | Closed out → `CLOSED`                                        |
+| `CLOSED`       | Terminal — resolved either way (won, lost, abandoned)                                            | —                                                            |
+
 
 **Key ideas:**
+
 - `PENDING` ⇄ `REACHED_OUT` flips every time the ball changes court. A prospect reply moves it **back to `PENDING`** (our turn again).
 - **"How long have we waited / is this going cold?"** = `now − state_changed_at` — a timestamp, not a status. A long stay in `REACHED_OUT` is what used to be "on hold."
 - **Qualify / disqualify is a human staff decision**, made at any point it is the lead's turn — not an automatic rule.
@@ -66,27 +71,31 @@ Invalid transition → 400. Every change appends to `lead_state_history` and upd
 
 ## Relationships
 
-| Relation | Target | Cardinality |
-|----------|--------|-------------|
-| `prospect` | Prospect | N leads → 1 prospect |
-| `resume_file` | Resume file | 1 lead → 1 file (v1) |
-| `assigned_account` | Account | N leads → 1 account (assignee) |
-| `state_history` | Lead state history | 1 lead → N history rows |
-| `email_notifications` | Email notification | 1 lead → N emails |
+
+| Relation              | Target             | Cardinality                    |
+| --------------------- | ------------------ | ------------------------------ |
+| `prospect`            | Prospect           | N leads → 1 prospect           |
+| `resume_file`         | Resume file        | 1 lead → 1 file (v1)           |
+| `assigned_account`    | Account            | N leads → 1 account (assignee) |
+| `state_history`       | Lead state history | 1 lead → N history rows        |
+| `email_notifications` | Email notification | 1 lead → N emails              |
+
 
 ---
 
 ## Business rules
 
-| Rule | Detail |
-|------|--------|
+
+| Rule                     | Detail                                                                                                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public intake (two-step) | **RequestLeadVerification** stores pending intake + temp resume and sends verification email — **no lead row yet**. **VerifyEmailAndCreateLead** (token from email link) runs full create orchestration. |
-| Email normalization (D7) | Lowercase + trim on every write (`RequestLeadVerification`, prospect find-or-create, lead denormalized `email`) |
-| State update | Internal only; attorney/admin per F6.2 |
-| On verify + create (L1b) | Find-or-create prospect; promote resume; auto-assign account; send emails (S7); optionally queue LLM job |
-| Denormalized names/email | Snapshot at verify time — prospect update does not retro-edit old leads |
-| Read scope (D1) | Attorneys with `read_leads` see **all** leads/resumes in list and detail — not limited to assigned rows |
-| Archived access (D3) | Archived leads remain readable by id (GetLead, DownloadResume, sub-routes); excluded from ListLeads unless `include_archived=true` |
+| Email normalization (D7) | Lowercase + trim on every write (`RequestLeadVerification`, prospect find-or-create, lead denormalized `email`)                                                                                          |
+| State update             | Internal only; attorney/admin per F6.2                                                                                                                                                                   |
+| On verify + create (L1b) | Find-or-create prospect; promote resume; auto-assign account; send emails (S7); optionally queue LLM job                                                                                                 |
+| Denormalized names/email | Snapshot at verify time — prospect update does not retro-edit old leads                                                                                                                                  |
+| Read scope (D1)          | Attorneys with `read_leads` see **all** leads/resumes in list and detail — not limited to assigned rows                                                                                                  |
+| Archived access (D3)     | Archived leads remain readable by id (GetLead, DownloadResume, sub-routes); excluded from ListLeads unless `include_archived=true`                                                                       |
+
 
 ---
 
@@ -96,21 +105,24 @@ Until email is verified, form data lives outside `leads`.
 
 ### Table: `lead_intake_pending` *(proposed name — confirm at implementation)*
 
-| Column | Type | Required | Notes |
-|--------|------|----------|-------|
-| `id` | UUID | PK | |
-| `token_hash` | VARCHAR(255) | yes | Hash of single-use verification token (never store raw token) |
-| `email` | VARCHAR(255) | yes | Lowercase normalized (D7) |
-| `first_name` | VARCHAR(100) | yes | |
-| `last_name` | VARCHAR(100) | yes | |
-| `source` | VARCHAR(100) | no | Optional attribution (A7) |
-| `temp_resume_path` | VARCHAR(500) | yes | Pending file location until L1b promotes |
-| `temp_resume_original_filename` | VARCHAR(255) | yes | |
-| `temp_resume_mime_type` | VARCHAR(100) | yes | |
-| `temp_resume_size_bytes` | BIGINT | yes | |
-| `expires_at` | TIMESTAMPTZ | yes | Token TTL — **TBD** (see open questions; e.g. 24–72 h) |
-| `used_at` | TIMESTAMPTZ | no | Set when L1b succeeds; prevents replay |
-| `created_at` | TIMESTAMPTZ | yes | |
+
+| Column                          | Type         | Required | Notes                                                         |
+| ------------------------------- | ------------ | -------- | ------------------------------------------------------------- |
+| `id`                            | UUID         | PK       |                                                               |
+| `token_hash`                    | VARCHAR(255) | yes      | Hash of single-use verification token (never store raw token) |
+| `email`                         | VARCHAR(255) | yes      | Lowercase normalized (D7)                                     |
+| `first_name`                    | VARCHAR(100) | yes      |                                                               |
+| `last_name`                     | VARCHAR(100) | yes      |                                                               |
+| `source`                        | VARCHAR(100) | no       | Optional attribution (A7)                                     |
+| `temp_resume_path`              | VARCHAR(500) | yes      | Pending file location until L1b promotes                      |
+| `temp_resume_original_filename` | VARCHAR(255) | yes      |                                                               |
+| `temp_resume_mime_type`         | VARCHAR(100) | yes      |                                                               |
+| `temp_resume_size_bytes`        | BIGINT       | yes      |                                                               |
+| `expires_at`                    | TIMESTAMPTZ  | yes      | Token TTL — **TBD** (see open questions; e.g. 24–72 h)        |
+| `used_at`                       | TIMESTAMPTZ  | no       | Set when L1b **claim** starts (row lock); prevents concurrent double-create |
+| `lead_id`                       | UUID         | FK       | Set when L1b completes; idempotent verify retries return this lead          |
+| `created_at`                    | TIMESTAMPTZ  | yes      |                                                               |
+
 
 **Cleanup:** Orphan pending rows + temp files after expiry (background job — out of scope v1 unless trivial).
 
@@ -118,27 +130,31 @@ Until email is verified, form data lives outside `leads`.
 
 ## API touchpoints
 
-| Operation | Endpoint | Auth | Action |
-|-----------|----------|------|--------|
-| RequestLeadVerification | `POST /leads/verification-requests` | Public | Store pending intake; send verification email |
-| VerifyEmailAndCreateLead | `GET /leads/verify?token=` (link) · `POST /leads/verify` (SPA) | Public | Consume token; create lead (+ prospect, file, emails) |
-| ListLeads | `GET /leads` | Internal | List with filters (state, assignee) |
-| GetLead | `GET /leads/{id}` | Internal | Detail incl. prospect, resume URL, custom_fields |
-| UpdateLead | `PATCH /leads/{id}` | Internal | Update state, assignment |
+
+| Operation                | Endpoint                                                       | Auth     | Action                                                |
+| ------------------------ | -------------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| RequestLeadVerification  | `POST /leads/verification-requests`                            | Public   | Store pending intake; send verification email         |
+| VerifyEmailAndCreateLead | `GET /leads/verify?token=` (link) · `POST /leads/verify` (SPA) | Public   | Consume token; create lead (+ prospect, file, emails) |
+| ListLeads                | `GET /leads`                                                   | Internal | List with filters (state, assignee)                   |
+| GetLead                  | `GET /leads/{id}`                                              | Internal | Detail incl. prospect, resume URL, custom_fields      |
+| UpdateLead               | `PATCH /leads/{id}`                                            | Internal | Update state, assignment                              |
+
 
 ---
 
 ## Pydantic schemas (proposed)
 
-| Schema | Use |
-|--------|-----|
-| `LeadVerificationRequestForm` | Public multipart — RequestLeadVerification |
-| `LeadVerificationRequestResponse` | 202 / check-your-email payload |
-| `LeadVerifyRequest` | POST body with `token` (SPA path) |
-| `LeadCreateResponse` | Public success after VerifyEmailAndCreateLead |
-| `LeadRead` | API response |
-| `LeadUpdate` | Internal PATCH (state, assigned_account_id) |
-| `LeadListItem` | Dashboard row |
+
+| Schema                            | Use                                           |
+| --------------------------------- | --------------------------------------------- |
+| `LeadVerificationRequestForm`     | Public multipart — RequestLeadVerification    |
+| `LeadVerificationRequestResponse` | 202 / check-your-email payload                |
+| `LeadVerifyRequest`               | POST body with `token` (SPA path)             |
+| `LeadCreateResponse`              | Public success after VerifyEmailAndCreateLead |
+| `LeadRead`                        | API response                                  |
+| `LeadUpdate`                      | Internal PATCH (state, assigned_account_id)   |
+| `LeadListItem`                    | Dashboard row                                 |
+
 
 ---
 
@@ -146,19 +162,21 @@ Until email is verified, form data lives outside `leads`.
 
 Guardrails that must hold **before** each operation succeeds. Permission checks (`read_leads`, `write_lead`, etc.) are separate — see [permission.md](permission.md). Readable operation names match [ARCHITECTURE.md](../ARCHITECTURE.md) Flow A/B.
 
-| Operation | Route ID | Must hold |
-|-----------|----------|-----------|
-| **RequestLeadVerification** | L1a | No auth. Valid multipart: `first_name`, `last_name`, `email`, `resume` (PDF/DOC/DOCX, ≤10 MB). Email normalized lowercase (D7). Resume saved to temp storage. Pending row + token created. Verification email send **must succeed** — otherwise rollback pending + temp file; **no lead row**. |
-| **VerifyEmailAndCreateLead** | L1b | No auth. Token present and matches pending row. Token **not expired** and **not already used**. Pending intake + temp resume exist. On success: single transaction for prospect (S1), resume promote (S2), assignee (S3), lead insert, history (S6), then S7 emails + optional S8. Mark token `used_at`. |
-| **ListLeads** | L2 | Valid JWT. Caller has `read_leads`. **D1:** attorneys see **all** leads — no assignee filter unless caller passes `assigned_account_id` or `mine=true`. Active leads only unless `include_archived=true`. |
-| **GetLead** | L3 | Valid JWT. `read_leads`. Lead exists. **D3:** `archived_at` set does **not** block access — 404 only when id missing. **D1:** any attorney may read any lead. |
-| **UpdateLead** | L4 | Valid JWT. `write_lead` (write scope still assigned-lead for attorneys per F6.2). Lead exists. Valid transition if `state` changes. `assign_lead` if reassigning. **D3:** archived leads remain addressable by id. |
-| **DownloadResume** | L5 | Valid JWT. `read_leads`. Lead + resume exist. **D3:** allowed for archived leads. **D1:** attorneys may download any lead's resume. Spec: [resume-file.md](resume-file.md). |
-| **ListLeadEmails** | L6 | Valid JWT. `read_emails`. Lead exists. **D3:** archived OK. Spec: [email-notification.md](email-notification.md). |
-| **GetLeadStateHistory** | L7 | Valid JWT. `read_leads`. Lead exists. **D3:** archived OK. Spec: [lead-state-history.md](lead-state-history.md). |
-| **TransitionLead** | L10 | Valid JWT. `write_lead`. Lead exists. `to_state` allowed by transition matrix. **D3:** archived leads still transition-capable (or document if blocked — v1: allow). |
-| **ExportLeads** | L13 | Valid JWT. `export_leads`. Same filter semantics as ListLeads (D1, `include_archived`). |
-| **ArchiveLead** | L14 | Valid JWT. `write_lead`. Lead exists and not already archived (re-archive → idempotent 204 or 404 — pick at implement). Sets `archived_at`. |
+
+| Operation                    | Route ID | Must hold                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RequestLeadVerification**  | L1a      | No auth. Valid multipart: `first_name`, `last_name`, `email`, `resume` (PDF/DOC/DOCX, ≤10 MB). Email normalized lowercase (D7). Resume saved to temp storage. Pending row + token created. Verification email send **must succeed** — otherwise rollback pending + temp file; **no lead row**.           |
+| **VerifyEmailAndCreateLead** | L1b      | No auth. Token present and matches pending row. Token **not expired** and **not already used**. Pending intake + temp resume exist. On success: single transaction for prospect (S1), resume promote (S2), assignee (S3), lead insert, history (S6), then S7 emails + optional S8. Mark token `used_at`. |
+| **ListLeads**                | L2       | Valid JWT. Caller has `read_leads`. **D1:** attorneys see **all** leads — no assignee filter unless caller passes `assigned_account_id` or `mine=true`. Active leads only unless `include_archived=true`.                                                                                                |
+| **GetLead**                  | L3       | Valid JWT. `read_leads`. Lead exists. **D3:** `archived_at` set does **not** block access — 404 only when id missing. **D1:** any attorney may read any lead.                                                                                                                                            |
+| **UpdateLead**               | L4       | Valid JWT. `write_lead` (write scope still assigned-lead for attorneys per F6.2). Lead exists. Valid transition if `state` changes. `assign_lead` if reassigning. **D3:** archived leads remain addressable by id.                                                                                       |
+| **DownloadResume**           | L5       | Valid JWT. `read_leads`. Lead + resume exist. **D3:** allowed for archived leads. **D1:** attorneys may download any lead's resume. Spec: [resume-file.md](resume-file.md).                                                                                                                              |
+| **ListLeadEmails**           | L6       | Valid JWT. `read_emails`. Lead exists. **D3:** archived OK. Spec: [email-notification.md](email-notification.md).                                                                                                                                                                                        |
+| **GetLeadStateHistory**      | L7       | Valid JWT. `read_leads`. Lead exists. **D3:** archived OK. Spec: [lead-state-history.md](lead-state-history.md).                                                                                                                                                                                         |
+| **TransitionLead**           | L10      | Valid JWT. `write_lead`. Lead exists. `to_state` allowed by transition matrix. **D3:** archived leads still transition-capable (or document if blocked — v1: allow).                                                                                                                                     |
+| **ExportLeads**              | L13      | Valid JWT. `export_leads`. Same filter semantics as ListLeads (D1, `include_archived`).                                                                                                                                                                                                                  |
+| **ArchiveLead**              | L14      | Valid JWT. `write_lead`. Lead exists and not already archived (re-archive → idempotent 204 or 404 — pick at implement). Sets `archived_at`.                                                                                                                                                              |
+
 
 **Prospect routes (D9 — in v1):** [prospect.md](prospect.md) P1/P2 require `read_prospect`; lead existence for nested lists follows same D3 rules.
 
@@ -174,30 +192,34 @@ Implementation helpers: `api/src/domains/lead/preconditions.py` (tested by `api/
 
 **Implement in:** `api/src/domains/lead/router.py`, `api/src/domains/lead/service.py`, `api/src/domains/lead/preconditions.py`, enrichment (optional)
 
-| ID | Operation | Type | Method | Path | Permission | Spec |
-|----|-----------|------|--------|------|------------|------|
-| L1a | **RequestLeadVerification** | HTTP | POST | `/api/v1/leads/verification-requests` | public | below |
-| L1b | **VerifyEmailAndCreateLead** | HTTP | GET | `/api/v1/leads/verify` | public | below |
-| L1b | **VerifyEmailAndCreateLead** | HTTP | POST | `/api/v1/leads/verify` | public | below (SPA) |
-| L2 | **ListLeads** | HTTP | GET | `/api/v1/leads` | `read_leads` | below |
-| L3 | **GetLead** | HTTP | GET | `/api/v1/leads/{lead_id}` | `read_leads` | below |
-| L4 | **UpdateLead** | HTTP | PATCH | `/api/v1/leads/{lead_id}` | `write_lead` | below |
-| L10 | **TransitionLead** | HTTP | POST | `/api/v1/leads/{lead_id}/transitions` | `write_lead` | below |
-| L13 | **ExportLeads** | HTTP | GET | `/api/v1/leads/export` | `export_leads` | below |
-| L14 | **ArchiveLead** | HTTP | DELETE | `/api/v1/leads/{lead_id}` | `write_lead` | below |
-| S4 | `LeadService.create_lead` | Service | — | — | L1b orchestrator | below + [API_CATALOG.md](API_CATALOG.md) |
-| S4a | `LeadService.request_verification` | Service | — | — | L1a | below |
-| S4b | `LeadService.verify_and_create_lead` | Service | — | — | L1b | below |
-| S5 | `LeadService.update_lead` | Service | — | — | L4 | below |
-| S8 | `EnrichmentService.enqueue_lead_enrichment` | Service | — | — | L1b (flag) | below |
+
+| ID  | Operation                            | Type    | Method | Path                                  | Permission       | Spec                                     |
+| --- | ------------------------------------ | ------- | ------ | ------------------------------------- | ---------------- | ---------------------------------------- |
+| L1a | **RequestLeadVerification**          | HTTP    | POST   | `/api/v1/leads/verification-requests` | public           | below                                    |
+| L1b | **VerifyEmailAndCreateLead**         | HTTP    | GET    | `/api/v1/leads/verify`                | public           | below                                    |
+| L1b | **VerifyEmailAndCreateLead**         | HTTP    | POST   | `/api/v1/leads/verify`                | public           | below (SPA)                              |
+| L2  | **ListLeads**                        | HTTP    | GET    | `/api/v1/leads`                       | `read_leads`     | below                                    |
+| L3  | **GetLead**                          | HTTP    | GET    | `/api/v1/leads/{lead_id}`             | `read_leads`     | below                                    |
+| L4  | **UpdateLead**                       | HTTP    | PATCH  | `/api/v1/leads/{lead_id}`             | `write_lead`     | below                                    |
+| L10 | **TransitionLead**                   | HTTP    | POST   | `/api/v1/leads/{lead_id}/transitions` | `write_lead`     | below                                    |
+| L13 | **ExportLeads**                      | HTTP    | GET    | `/api/v1/leads/export`                | `export_leads`   | below                                    |
+| L14 | **ArchiveLead**                      | HTTP    | DELETE | `/api/v1/leads/{lead_id}`             | `write_lead`     | below                                    |
+| S4  | `LeadService.create_lead`            | Service | —      | —                                     | L1b orchestrator | below + [API_CATALOG.md](API_CATALOG.md) |
+| S4a | `LeadService.request_verification`   | Service | —      | —                                     | L1a              | below                                    |
+| S4b | `LeadService.verify_and_create_lead` | Service | —      | —                                     | L1b              | below                                    |
+| S5  | `LeadService.update_lead`            | Service | —      | —                                     | L4               | below                                    |
+| S8  | `schedule_lead_enrichment`           | Service | —      | —                                     | L1b (flag)       | below                                    |
+
 
 **Mount sub-routers from other packages (do not reimplement):**
 
-| ID | Operation | Owner doc | Path |
-|----|-----------|-----------|------|
-| L5 | **DownloadResume** | [resume-file.md](resume-file.md) | `/api/v1/leads/{lead_id}/resume` |
-| L6 | **ListLeadEmails** | [email-notification.md](email-notification.md) | `/api/v1/leads/{lead_id}/emails` |
-| L7 | **GetLeadStateHistory** | [lead-state-history.md](lead-state-history.md) | `/api/v1/leads/{lead_id}/state-history` |
+
+| ID  | Operation               | Owner doc                                      | Path                                    |
+| --- | ----------------------- | ---------------------------------------------- | --------------------------------------- |
+| L5  | **DownloadResume**      | [resume-file.md](resume-file.md)               | `/api/v1/leads/{lead_id}/resume`        |
+| L6  | **ListLeadEmails**      | [email-notification.md](email-notification.md) | `/api/v1/leads/{lead_id}/emails`        |
+| L7  | **GetLeadStateHistory** | [lead-state-history.md](lead-state-history.md) | `/api/v1/leads/{lead_id}/state-history` |
+
 
 **Calls on L1b (import other services):** S1 [prospect.md](prospect.md), S2 [resume-file.md](resume-file.md), S3 [account.md](account.md), S6 [lead-state-history.md](lead-state-history.md), S7 [email-notification.md](email-notification.md).
 
@@ -207,20 +229,22 @@ Implementation helpers: `api/src/domains/lead/preconditions.py` (tested by `api/
 
 ### Lead route index (L1a–L14)
 
-| ID | Operation | Method | Path | Defined in | Purpose |
-|----|-----------|--------|------|------------|---------|
-| L1a | RequestLeadVerification | POST | `/leads/verification-requests` | below | Public — pending intake + email |
-| L1b | VerifyEmailAndCreateLead | GET | `/leads/verify?token=` | below | Email link — create lead |
-| L1b | VerifyEmailAndCreateLead | POST | `/leads/verify` | below | SPA — `{ "token": "..." }` |
-| L2 | ListLeads | GET | `/leads` | below | List / filter |
-| L3 | GetLead | GET | `/leads/{id}` | below | Detail |
-| L4 | UpdateLead | PATCH | `/leads/{id}` | below | Update assignee, etc. |
-| L5 | DownloadResume | GET | `/leads/{id}/resume` | [resume-file.md](resume-file.md) | Download CV |
-| L6 | ListLeadEmails | GET | `/leads/{id}/emails` | [email-notification.md](email-notification.md) | Email log for lead |
-| L7 | GetLeadStateHistory | GET | `/leads/{id}/state-history` | [lead-state-history.md](lead-state-history.md) | State change audit |
-| L10 | TransitionLead | POST | `/leads/{id}/transitions` | below | State transition + note |
-| L13 | ExportLeads | GET | `/leads/export` | below | CSV export |
-| L14 | ArchiveLead | DELETE | `/leads/{id}` | below | Archive (soft) |
+
+| ID  | Operation                | Method | Path                           | Defined in                                     | Purpose                         |
+| --- | ------------------------ | ------ | ------------------------------ | ---------------------------------------------- | ------------------------------- |
+| L1a | RequestLeadVerification  | POST   | `/leads/verification-requests` | below                                          | Public — pending intake + email |
+| L1b | VerifyEmailAndCreateLead | GET    | `/leads/verify?token=`         | below                                          | Email link — create lead        |
+| L1b | VerifyEmailAndCreateLead | POST   | `/leads/verify`                | below                                          | SPA — `{ "token": "..." }`      |
+| L2  | ListLeads                | GET    | `/leads`                       | below                                          | List / filter                   |
+| L3  | GetLead                  | GET    | `/leads/{id}`                  | below                                          | Detail                          |
+| L4  | UpdateLead               | PATCH  | `/leads/{id}`                  | below                                          | Update assignee, etc.           |
+| L5  | DownloadResume           | GET    | `/leads/{id}/resume`           | [resume-file.md](resume-file.md)               | Download CV                     |
+| L6  | ListLeadEmails           | GET    | `/leads/{id}/emails`           | [email-notification.md](email-notification.md) | Email log for lead              |
+| L7  | GetLeadStateHistory      | GET    | `/leads/{id}/state-history`    | [lead-state-history.md](lead-state-history.md) | State change audit              |
+| L10 | TransitionLead           | POST   | `/leads/{id}/transitions`      | below                                          | State transition + note         |
+| L13 | ExportLeads              | GET    | `/leads/export`                | below                                          | CSV export                      |
+| L14 | ArchiveLead              | DELETE | `/leads/{id}`                  | below                                          | Archive (soft)                  |
+
 
 > **Naming:** **L6/L7** = HTTP routes (sub-entities). **S6/S7** in orchestration = service calls on verify+create — different IDs.
 
@@ -230,13 +254,15 @@ Implementation helpers: `api/src/domains/lead/preconditions.py` (tested by `api/
 
 **Content-Type:** `multipart/form-data`
 
-| Part | Type | Required |
-|------|------|----------|
-| `first_name` | string | yes |
-| `last_name` | string | yes |
-| `email` | string (email) | yes — stored lowercase (D7) |
-| `source` | string | no |
-| `resume` | file (PDF/DOC/DOCX, ≤10 MB) | yes |
+
+| Part         | Type                        | Required                    |
+| ------------ | --------------------------- | --------------------------- |
+| `first_name` | string                      | yes                         |
+| `last_name`  | string                      | yes                         |
+| `email`      | string (email)              | yes — stored lowercase (D7) |
+| `source`     | string                      | no                          |
+| `resume`     | file (PDF/DOC/DOCX, ≤10 MB) | yes                         |
+
 
 **Response `202` — `LeadVerificationRequestResponse`:**
 
@@ -277,9 +303,9 @@ See [API_CATALOG.md](API_CATALOG.md#orchestration-lead-intake-l1a--l1b).
 }
 ```
 
-**Errors:** 400 (`token` missing); 404 (unknown token); 410 (expired token); 409 (token already used); 422 (pending data invalid).
+**Errors:** 400 (`token` missing); 404 (unknown token); 410 (expired token); 409 (verification **in progress** — another request holds the claim); 422 (pending data invalid). **Idempotent retry:** if verify already completed (`lead_id` set), returns **201** with the same lead (no duplicate create).
 
-**Side effects:** Load pending by token; reject expired/used; run create orchestration (S1–S7, optional S8); mark pending `used_at`; promote temp resume. See [API_CATALOG.md](API_CATALOG.md#orchestration-lead-intake-l1a--l1b).
+**Side effects:** Load pending by token with row lock; claim row (`used_at`); run create orchestration (S1–S7, optional S8); set `lead_id` on pending; promote temp resume. Stale reclaim after `VERIFICATION_PROCESSING_STALE_MINUTES` (default 5) if claim stuck without `lead_id`. See [API_CATALOG.md](API_CATALOG.md#orchestration-lead-intake-l1a--l1b).
 
 ---
 
@@ -291,14 +317,16 @@ See [API_CATALOG.md](API_CATALOG.md#orchestration-lead-intake-l1a--l1b).
 
 **Query — `LeadListParams`:**
 
-| Param | Type | Default |
-|-------|------|---------|
-| `state` | lead state enum | — |
-| `assigned_account_id` | UUID | — |
-| `mine` | bool | false — if true, filter to `assigned_account_id` = current JWT account (convenience; same as passing your own id) |
-| `include_archived` | bool | false |
-| `page` | int | 1 |
-| `page_size` | int | 20 |
+
+| Param                 | Type            | Default                                                                                                           |
+| --------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `state`               | lead state enum | —                                                                                                                 |
+| `assigned_account_id` | UUID            | —                                                                                                                 |
+| `mine`                | bool            | false — if true, filter to `assigned_account_id` = current JWT account (convenience; same as passing your own id) |
+| `include_archived`    | bool            | false                                                                                                             |
+| `page`                | int             | 1                                                                                                                 |
+| `page_size`           | int             | 20                                                                                                                |
+
 
 **L8 not added:** `GET /leads/mine` would duplicate L2 — use `?mine=true` or `?assigned_account_id={your_id}`.
 
@@ -365,6 +393,7 @@ See [API_CATALOG.md](API_CATALOG.md#orchestration-lead-intake-l1a--l1b).
     "first_name": "Jane",
     "last_name": "Doe"
   },
+  "archived_at": null,
   "created_at": "2026-06-27T21:00:00Z",
   "updated_at": "2026-06-27T21:00:00Z"
 }
@@ -464,21 +493,19 @@ Columns: id, names, email, state, source, assignee, created_at (minimum).
 
 ---
 
-### Service — `EnrichmentService` (F7.1, optional)
+### Service — enrichment (F7.1, optional)
 
 ```python
-# api/src/services/enrichment.py
+# api/src/domains/lead/enrichment.py
 
-def enqueue_lead_enrichment(lead_id: UUID) -> None:
-    """FastAPI BackgroundTasks or asyncio task.
-    Reads resume text; calls LLM; PATCHes lead.custom_fields.
-    Failures logged only — never block L1b."""
+def schedule_lead_enrichment(lead_id: UUID) -> None:
+    """Queued via FastAPI BackgroundTasks after L1b response."""
 
-def extract_custom_fields(resume_bytes: bytes, mime_type: str) -> dict:
-    """Returns JSON-serializable custom_fields dict."""
+def extract_custom_fields_dummy(*, lead_id: UUID) -> dict:
+    """Placeholder LLM output until real resume extraction is wired."""
 ```
 
-**Called by:** L1b when `settings.enable_llm_enrichment=true` — **S8**.
+**Called by:** L1b verify routes when `settings.enable_llm_enrichment=true` — **S8** (background, non-blocking).
 
 ---
 
@@ -541,22 +568,26 @@ def update_lead(
 
 ## Deferred / out of scope
 
-| ID | Action | Decision |
-|----|--------|----------|
-| **L8** | `GET /leads/mine` | **Rejected** — redundant with L2 `?mine=true` or `?assigned_account_id=` |
-| **L9** | `GET /leads/stats` | **Out of scope** v1 |
-| **L11** | `GET /leads/{id}/timeline` | **Pending** — unified feed (see below) |
-| **L12** | `PATCH /leads/{id}/notes` | **Pending** — no `internal_notes` column today (see below) |
+
+| ID      | Action                     | Decision                                                                 |
+| ------- | -------------------------- | ------------------------------------------------------------------------ |
+| **L8**  | `GET /leads/mine`          | **Rejected** — redundant with L2 `?mine=true` or `?assigned_account_id=` |
+| **L9**  | `GET /leads/stats`         | **Out of scope** v1                                                      |
+| **L11** | `GET /leads/{id}/timeline` | **Pending** — unified feed (see below)                                   |
+| **L12** | `PATCH /leads/{id}/notes`  | **Pending** — no `internal_notes` column today (see below)               |
+
 
 ### What is L11?
 
 Single endpoint returning a **merged activity feed** for one lead, sorted by time:
 
-| Event type | Source |
-|------------|--------|
-| State change | `lead_state_history` |
-| Email sent/failed | `email_notifications` |
+
+| Event type           | Source                               |
+| -------------------- | ------------------------------------ |
+| State change         | `lead_state_history`                 |
+| Email sent/failed    | `email_notifications`                |
 | Enrichment completed | `leads.custom_fields` updated (F7.1) |
+
 
 Alternative v1: client calls L7 + L6 separately — L11 is UI sugar only. Approve if you want one round-trip for detail page.
 
@@ -564,10 +595,12 @@ Alternative v1: client calls L7 + L6 separately — L11 is UI sugar only. Approv
 
 **Not tracked today.** We have:
 
-| Mechanism | What it stores |
-|-----------|----------------|
-| **L10 `note`** | Optional comment on a **state transition** → `lead_state_history.note` |
+
+| Mechanism                | What it stores                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| **L10 `note`**           | Optional comment on a **state transition** → `lead_state_history.note`                                |
 | **L12 `internal_notes`** | Would be a freeform scratchpad on the **lead row** (always visible on detail) — **not in schema yet** |
+
 
 If you want a persistent lead-level notepad (not tied to a transition), say yes and we add `internal_notes TEXT` + L12.
 
@@ -577,14 +610,15 @@ If you want a persistent lead-level notepad (not tied to a transition), say yes 
 
 ## Implementation checklist
 
-- [ ] SQLAlchemy model + enums for state + `archived_at`
-- [ ] `lead_intake_pending` model + Alembic migration
-- [ ] `preconditions.py` rules (state matrix, token, D3 list filter)
-- [ ] `POST /api/v1/leads/verification-requests` (L1a)
-- [ ] `GET` + `POST /api/v1/leads/verify` (L1b)
-- [ ] `GET` / `PATCH` internal routes (L2–L4)
-- [ ] L10 transitions, L13 export, L14 archive
-- [ ] `LeadService.request_verification` + `verify_and_create_lead`
-- [ ] Assignment service hook (F6.1) on L1b only
-- [ ] State history writer on PATCH + L10 (F2.1)
-- [ ] Verification email template + send path
+- SQLAlchemy model + enums for state + `archived_at`
+- `lead_intake_pending` model + Alembic migration
+- `preconditions.py` rules (state matrix, token, D3 list filter)
+- `POST /api/v1/leads/verification-requests` (L1a)
+- `GET` + `POST /api/v1/leads/verify` (L1b)
+- `GET` / `PATCH` internal routes (L2–L4)
+- L10 transitions, L13 export, L14 archive
+- `LeadService.request_verification` + `verify_and_create_lead`
+- Assignment service hook (F6.1) on L1b only
+- State history writer on PATCH + L10 (F2.1)
+- Verification email template + send path
+

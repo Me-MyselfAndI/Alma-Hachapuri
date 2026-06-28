@@ -271,11 +271,11 @@ def render_template(template: str, context: dict) -> tuple[str, str]:
 
 **Permission:** `send_email`
 
-**Precondition:** Original row `status=failed` only (see [Preconditions](#preconditions)).
+**Precondition:** Original row `status=failed` only (see [Preconditions](#preconditions)). **Not allowed** for template `email_verification` — verification emails are sent only from the public submission form; if delivery failed, the applicant must submit again (**409**).
 
 **Response `200` — `EmailNotificationRead`** (same row updated, or new attempt row — implementer choice; prefer update in place v1).
 
-**Side effects:** Re-render from stored template/context; reuse same `conversation_id`; SMTP retry.
+**Side effects:** Re-render from stored template/context; reuse same `conversation_id`; SMTP retry. Does not apply to pre-lead verification emails.
 
 ---
 

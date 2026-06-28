@@ -8,7 +8,7 @@
 
 - Model `admin`, `attorney`, `intake_coordinator`, `readonly` as an **immutable** field on account create
 - Permissions computed from `ROLE_PERMISSIONS` in code — see [permission.md](permission.md)
-- JWT includes `role` + `permissions[]` at login
+- JWT includes `role` + `permissions[]` at login (permissions are recomputed from `ROLE_PERMISSIONS` for the UI; API auth re-reads DB role)
 
 This is simplified IAM:
 

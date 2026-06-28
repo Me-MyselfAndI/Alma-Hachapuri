@@ -76,7 +76,7 @@ accounts 1 ──< N assigned leads (when role assignable)
 
 | Blocker | Status |
 |---------|--------|
-| F2.1 Lead state lifecycle | **Closed** — 7 states in `lead.md` |
+| F2.1 Lead state lifecycle | **Closed** — 5 states in `lead.md` |
 | F6.1 Lead assignment | **Closed** — `assigned_account_id` |
 | F6.2 Permissions | **Closed** — `ROLE_PERMISSIONS` code |
 | F3.1 Notification routing | **Closed** — assigned account email |

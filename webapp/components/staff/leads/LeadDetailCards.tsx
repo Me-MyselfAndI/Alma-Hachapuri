@@ -51,7 +51,7 @@ export function LeadDetailCards({ lead }: LeadDetailCardsProps) {
   const fullName = `${lead.first_name} ${lead.last_name}`.trim();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {lead.archived_at ? (
         <Alert>
           <AlertTitle>Archived</AlertTitle>
@@ -61,7 +61,7 @@ export function LeadDetailCards({ lead }: LeadDetailCardsProps) {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Lead record</CardTitle>

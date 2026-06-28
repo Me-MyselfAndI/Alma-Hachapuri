@@ -3,7 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState, startTransition } from "react";
 
-import type { AccountMe, AssignedAccountSummary, LeadRead } from "@/lib/types";
+import type { AccountMe, AccountRead, LeadRead, Paginated } from "@/lib/types";
 import { formatStaffApiError, staffFetch } from "@/lib/staff-api";
 import { getPermissionMessage } from "@/lib/permission-messages";
 import { cn } from "@/lib/utils";
@@ -33,8 +33,24 @@ type LeadAssigneePanelProps = {
   onLeadUpdated: (lead: LeadRead) => void;
 };
 
-function assigneeLabel(account: AssignedAccountSummary): string {
+type AssigneeRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+};
+
+function assigneeLabel(account: AssigneeRow): string {
   return `${account.first_name} ${account.last_name}`.trim();
+}
+
+function toAssigneeRow(account: AccountRead): AssigneeRow {
+  return {
+    id: account.id,
+    first_name: account.first_name,
+    last_name: account.last_name,
+    email: account.email,
+  };
 }
 
 function LoadingRows() {
@@ -60,9 +76,11 @@ export function LeadAssigneePanel({
   onLeadUpdated,
 }: LeadAssigneePanelProps) {
   const canAssign = user.permissions.includes("assign_lead");
+  const canManageUsers = user.permissions.includes("manage_users");
 
-  const [assignees, setAssignees] = useState<AssignedAccountSummary[]>([]);
+  const [assignees, setAssignees] = useState<AssigneeRow[]>([]);
   const [loadingAssignees, setLoadingAssignees] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,21 +91,35 @@ export function LeadAssigneePanel({
     }
 
     setLoadingAssignees(true);
+    setLoadFailed(false);
     setError(null);
 
-    const result = await staffFetch<AssignedAccountSummary[]>(
-      "/api/v1/accounts/assignable",
+    let result = await staffFetch<Paginated<AccountRead>>(
+      "/api/v1/accounts?for_assignment=true&page_size=100",
     );
+
+    if (!result.ok && canManageUsers) {
+      result = await staffFetch<Paginated<AccountRead>>(
+        "/api/v1/accounts?role=attorney&page_size=100",
+      );
+    }
 
     setLoadingAssignees(false);
 
     if (!result.ok) {
+      setLoadFailed(true);
+      setAssignees([]);
+      if (result.status === 403) {
+        setError(getPermissionMessage("assign_lead"));
+        return;
+      }
       setError(formatStaffApiError(result.status, result.body));
       return;
     }
 
-    setAssignees(result.data);
-  }, [canAssign]);
+    const active = result.data.items.filter((account) => account.is_active);
+    setAssignees(active.map(toAssigneeRow));
+  }, [canAssign, canManageUsers]);
 
   useEffect(() => {
     startTransition(() => {
@@ -127,7 +159,7 @@ export function LeadAssigneePanel({
   }
 
   const currentName = lead.assigned_account
-    ? assigneeLabel(lead.assigned_account)
+    ? `${lead.assigned_account.first_name} ${lead.assigned_account.last_name}`.trim()
     : "Unassigned";
 
   return (
@@ -152,6 +184,16 @@ export function LeadAssigneePanel({
             <TableBody>
               {loadingAssignees ? (
                 <LoadingRows />
+              ) : loadFailed ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={3}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Could not load attorneys. See the error below and try
+                    refreshing after restarting the API.
+                  </TableCell>
+                </TableRow>
               ) : assignees.length === 0 ? (
                 <TableRow>
                   <TableCell

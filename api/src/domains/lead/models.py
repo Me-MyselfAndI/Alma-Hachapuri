@@ -134,7 +134,14 @@ class LeadIntakePending(Base):
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Set when L1b succeeds; prevents replay.",
+        comment="Set when L1b claim starts; prevents concurrent double-create.",
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("leads.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Set when L1b completes; idempotent verify retries return this lead.",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

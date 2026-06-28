@@ -23,11 +23,16 @@ from src.core.permissions import Role, account_has_permission
 from src.domains.account.models import Account
 from src.domains.account.service import AccountService
 from src.domains.email.service import EmailDeliveryError, EmailService
+from src.domains.lead.intake_claim import (
+    VerifyClaimOutcome,
+    claim_pending_for_verify,
+    load_pending_for_verify,
+    raise_for_claim_outcome,
+    resolve_completed_lead,
+)
 from src.domains.lead.models import Lead, LeadIntakePending
 from src.domains.lead.preconditions import (
     LeadState,
-    VerificationTokenError,
-    check_verification_token,
     is_valid_state_transition,
     normalize_email,
 )
@@ -168,30 +173,13 @@ class LeadService:
             )
 
         token_hash = hash_verification_token(token.strip())
-        pending = db.scalar(
-            select(LeadIntakePending).where(LeadIntakePending.token_hash == token_hash)
-        )
-        if pending is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unknown verification token",
-            )
+        pending = load_pending_for_verify(db, token_hash=token_hash)
+        claim = claim_pending_for_verify(db, pending=pending)
 
-        token_err = check_verification_token(
-            expires_at=_as_utc(pending.expires_at),
-            used_at=_as_utc(pending.used_at) if pending.used_at else None,
-            now=_now_utc(),
-        )
-        if token_err is VerificationTokenError.ALREADY_USED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Verification token already used",
-            )
-        if token_err is VerificationTokenError.EXPIRED:
-            raise HTTPException(
-                status_code=status.HTTP_410_GONE,
-                detail="Verification token expired",
-            )
+        if claim.outcome is VerifyClaimOutcome.ALREADY_COMPLETED:
+            return resolve_completed_lead(db, pending=pending)
+
+        raise_for_claim_outcome(claim)
 
         promoted_key: str | None = None
         try:
@@ -216,7 +204,7 @@ class LeadService:
                 source=pending.source,
             )
 
-            pending.used_at = _now_utc()
+            pending.lead_id = lead.id
             db.commit()
             db.refresh(lead)
         except HTTPException:

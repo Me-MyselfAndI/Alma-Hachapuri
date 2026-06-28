@@ -44,6 +44,9 @@ class Settings(BaseSettings):
 
     verification_token_ttl_hours: int = 24
 
+    # L1b — reclaim a stuck pending row when used_at is set but lead_id is still null.
+    verification_processing_stale_minutes: int = 5
+
     # F2.5 — days after archive before resume purge job may delete files (job TBD).
     resume_retention_days: int = 365
 

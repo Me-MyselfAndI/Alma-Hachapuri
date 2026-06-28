@@ -161,6 +161,7 @@ class TestVerifyAndCreateLead:
 
         db_session.refresh(pending)
         assert pending.used_at is not None
+        assert pending.lead_id == lead.id
 
         history = list(
             db_session.scalars(
@@ -307,7 +308,7 @@ class TestTokenErrors:
 
     @patch("src.domains.lead.service.EmailService.send_verification_email")
     @patch("src.domains.lead.service.EmailService.send_lead_created_notifications")
-    def test_used_token(
+    def test_idempotent_retry_returns_same_lead(
         self,
         mock_created,
         mock_send,
@@ -326,12 +327,68 @@ class TestTokenErrors:
             resume=_make_upload(),
         )
         raw_token = mock_send.call_args.kwargs["token"]
-        LeadService.verify_and_create_lead(db_session, token=raw_token)
+        first = LeadService.verify_and_create_lead(db_session, token=raw_token)
+        second = LeadService.verify_and_create_lead(db_session, token=raw_token)
 
+        assert second.id == first.id
+        mock_created.assert_called_once()
+
+    @patch("src.domains.lead.service.EmailService.send_verification_email")
+    def test_in_progress_returns_409(self, mock_send, db_session, uploads_dir) -> None:
+        mock_send.return_value = None
+        _seed_default_attorney(db_session)
+
+        LeadService.request_verification(
+            db_session,
+            first_name="Jane",
+            last_name="Doe",
+            email="jane@example.com",
+            resume=_make_upload(),
+        )
+        pending = db_session.scalar(select(LeadIntakePending))
+        assert pending is not None
+        pending.used_at = datetime.now(UTC)
+        db_session.commit()
+
+        raw_token = mock_send.call_args.kwargs["token"]
         with pytest.raises(HTTPException) as exc_info:
             LeadService.verify_and_create_lead(db_session, token=raw_token)
 
         assert exc_info.value.status_code == 409
+        assert "in progress" in exc_info.value.detail.lower()
+
+    @patch("src.domains.lead.service.EmailService.send_verification_email")
+    @patch("src.domains.lead.service.EmailService.send_lead_created_notifications")
+    def test_stale_claim_allows_retry(
+        self,
+        mock_created,
+        mock_send,
+        db_session,
+        uploads_dir,
+    ) -> None:
+        mock_send.return_value = None
+        mock_created.return_value = None
+        _seed_default_attorney(db_session)
+
+        LeadService.request_verification(
+            db_session,
+            first_name="Jane",
+            last_name="Doe",
+            email="jane@example.com",
+            resume=_make_upload(),
+        )
+        pending = db_session.scalar(select(LeadIntakePending))
+        assert pending is not None
+        pending.used_at = datetime.now(UTC) - timedelta(minutes=10)
+        db_session.commit()
+
+        raw_token = mock_send.call_args.kwargs["token"]
+        lead = LeadService.verify_and_create_lead(db_session, token=raw_token)
+
+        assert lead.email == "jane@example.com"
+        db_session.refresh(pending)
+        assert pending.lead_id == lead.id
+        mock_created.assert_called_once()
 
     def test_unknown_token(self, db_session) -> None:
         with pytest.raises(HTTPException) as exc_info:

@@ -11,6 +11,7 @@
 | `service.py` | LeadService (S4, S5) |
 | `enrichment.py` | F7.1 dummy LLM + background queue (S8) |
 | `tokens.py` | Verification token hash / reissue (L1a, E3 retry) |
+| `intake_claim.py` | L1b row lock + idempotent verify claim (S4b) |
 | `router.py` | L1–L4, L10, L13, L14 — mount at `/api/v1/leads` |
 
 ## Sub-routers (mounted from other domains in `src/main.py`)

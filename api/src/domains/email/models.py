@@ -1,8 +1,9 @@
 """SQLAlchemy model — EmailNotification.
 
 Spec: docs/entities/email-notification.md. Audit log for outbound email tied
-to a lead. `conversation_id` groups one thread = `(lead_id, recipient)`; we
-index `(conversation_id, created_at)` to support timeline queries (L6/E4).
+to a lead (or pending intake for S7a verification). ``conversation_id`` groups
+one thread = ``(lead_id, recipient)``; we index ``(conversation_id, created_at)``
+to support timeline queries (L6/E4).
 """
 
 from __future__ import annotations
@@ -25,11 +26,19 @@ class EmailNotification(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("leads.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
+        comment="Null for S7a verification emails sent before lead exists.",
+    )
+    pending_intake_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("lead_intake_pending.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Set for S7a email_verification rows (pre-lead).",
     )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

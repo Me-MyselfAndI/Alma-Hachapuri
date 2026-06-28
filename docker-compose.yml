@@ -1,3 +1,9 @@
+# Local infrastructure for the four-component monorepo:
+#   webapp/   — Next.js (run on host)
+#   api/      — FastAPI (run on host)
+#   db/       — PostgreSQL (this file)
+#   storage/  — resume files on disk (run on host)
+
 services:
   postgres:
     image: postgres:16-alpine

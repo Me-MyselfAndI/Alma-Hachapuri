@@ -1,14 +1,14 @@
 # Alma Lead Intake
 
-Monorepo: **Next.js** frontend + **FastAPI** backend + **PostgreSQL** + local file uploads.
+Monorepo with **four components**: web application, API service, database, and file storage.
 
 ## Prerequisites
 
 | Tool | Purpose | Install |
 |------|---------|---------|
-| **Node.js** 18+ | Next.js | [nodejs.org](https://nodejs.org) |
-| **Python** 3.11+ | FastAPI | [python.org](https://python.org) |
-| **Docker Desktop** | PostgreSQL + Mailpit (recommended) | [docker.com](https://www.docker.com/products/docker-desktop/) |
+| **Node.js** 18+ | Web application | [nodejs.org](https://nodejs.org) |
+| **Python** 3.11+ | API service | [python.org](https://python.org) |
+| **Docker Desktop** | Database + Mailpit (recommended) | [docker.com](https://www.docker.com/products/docker-desktop/) |
 
 No accounts required for local dev (no GitHub, Resend, or OpenAI until you choose to add them).
 
@@ -22,7 +22,7 @@ No accounts required for local dev (no GitHub, Resend, or OpenAI until you choos
 copy .env.example .env
 ```
 
-### 2. Infrastructure (PostgreSQL + Mailpit)
+### 2. Database + Mailpit (Docker)
 
 ```powershell
 docker compose up -d
@@ -30,25 +30,25 @@ docker compose up -d
 
 Mailpit UI: http://localhost:8025
 
-### 3. Backend (FastAPI)
+### 3. API service (FastAPI)
 
 ```powershell
-cd backend
+cd api
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn src.main:app --reload --port 8000
 ```
 
 API docs: http://localhost:8000/docs  
 Health: http://localhost:8000/health
 
-### 4. Frontend (Next.js)
+### 4. Web application (Next.js)
 
 New terminal:
 
 ```powershell
-cd frontend
+cd webapp
 npm install
 npm run dev
 ```
@@ -58,11 +58,12 @@ App: http://localhost:3000
 ## Project layout
 
 ```text
-backend/          FastAPI — API, auth, DB, files, email
-frontend/         Next.js — public form + internal UI
+webapp/           Web application (Next.js) — public form + internal UI
+api/              API service (FastAPI) — business logic, auth, I/O
+db/               Database (PostgreSQL) — Alembic migrations
+storage/          File storage — resume uploads (local disk; S3 later)
 docs/             Requirements, architecture, entities, features
-docker-compose.yml
-uploads/          Created at runtime for resume files
+docker-compose.yml   Postgres + Mailpit for local dev
 ```
 
 ## Documentation

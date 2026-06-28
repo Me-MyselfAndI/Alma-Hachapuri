@@ -154,7 +154,7 @@ class AccountService:
 
         if data.is_default_assignee and role_value != Role.ATTORNEY.value:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail="is_default_assignee is only valid for attorneys (D6)",
             )
 
@@ -186,6 +186,37 @@ class AccountService:
 
         db.commit()
         db.refresh(account)
+        return account
+
+    @staticmethod
+    def resolve_default_assignee(db: Session) -> Account:
+        """Return the active attorney with ``is_default_assignee=true`` (S3 / F6.1).
+
+        Raises HTTP 500 when misconfigured (D4): no qualifying row, or the
+        default assignee is inactive.
+        """
+
+        stmt = select(Account).where(
+            Account.role == Role.ATTORNEY.value,
+            Account.is_default_assignee.is_(True),
+        )
+        account = db.scalar(stmt)
+        if account is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "No default assignee configured: an active attorney with "
+                    "is_default_assignee=true is required (D4)"
+                ),
+            )
+        if not account.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "Default assignee is inactive: an active attorney with "
+                    "is_default_assignee=true is required (D4)"
+                ),
+            )
         return account
 
     @staticmethod
@@ -233,7 +264,7 @@ class AccountService:
             and account.role != Role.ATTORNEY.value
         ):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail="is_default_assignee is only valid for attorneys (D6)",
             )
 
@@ -255,7 +286,7 @@ class AccountService:
             )
             if others == 0:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=422,
                     detail=(
                         "At least one active attorney with "
                         "is_default_assignee=true must remain (D4)"

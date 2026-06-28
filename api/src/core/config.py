@@ -20,8 +20,20 @@ class Settings(BaseSettings):
 
     smtp_host: str = "localhost"
     smtp_port: int = 1025
+    webapp_url: str = "http://localhost:3000"
 
     enable_llm_enrichment: bool = False
+
+    verification_token_ttl_hours: int = 24
+    webapp_url: str = "http://localhost:3000"
+
+    # Demo / seed credentials — override per-env via env vars in production.
+    demo_admin_password: str = "admin123"
+    demo_attorney_password: str = "attorney123"
+    demo_intake_password: str = "intake123"
+    demo_readonly_password: str = "readonly123"
+    # Set to true to skip the startup seed (tests bypass via patched SessionLocal).
+    disable_startup_seed: bool = False
 
 
 settings = Settings()

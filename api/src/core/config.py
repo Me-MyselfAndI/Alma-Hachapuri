@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     database_url: str = "postgresql://alma:alma@localhost:5432/alma"
-    uploads_dir: str = "uploads"
+    uploads_dir: str = "../storage/uploads"
 
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"

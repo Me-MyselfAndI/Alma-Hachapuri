@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 # Python venv
-backend/.venv/
+api/.venv/
 .env
 
 # Node
@@ -10,8 +10,9 @@ node_modules/
 .next/
 out/
 
-# Uploads & local data
-uploads/
+# File storage (runtime uploads)
+storage/uploads/*
+!storage/uploads/.gitkeep
 *.db
 
 # IDE / OS
@@ -19,3 +20,37 @@ uploads/
 .vscode/
 .DS_Store
 Thumbs.db
+docs/AGENT_CORRECTIONS.md
+docs/ARCHITECTURE.md
+docs/ASSUMPTIONS.md
+docs/FEATURES.md
+docs/QUESTIONS_LOG.md
+docs/SESSION_CONTEXT.md
+docs/WORKING_AGREEMENTS.md
+docs/entities/account.md
+docs/entities/API_CATALOG.md
+docs/entities/attorney.md
+docs/entities/email-notification.md
+docs/entities/lead-state-history.md
+docs/entities/lead.md
+docs/entities/permission.md
+docs/entities/prospect.md
+docs/entities/README.md
+docs/entities/resume-file.md
+docs/entities/role.md
+docs/AGENT_CORRECTIONS.md
+docs/ARCHITECTURE.md
+docs/ASSUMPTIONS.md
+docs/FEATURES.md
+docs/QUESTIONS_LOG.md
+docs/SESSION_CONTEXT.md
+docs/entities/account.md
+docs/entities/attorney.md
+docs/entities/email-notification.md
+docs/entities/lead-state-history.md
+docs/entities/lead.md
+docs/entities/permission.md
+docs/entities/prospect.md
+docs/entities/README.md
+docs/entities/resume-file.md
+docs/entities/role.md

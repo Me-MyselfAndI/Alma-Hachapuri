@@ -30,6 +30,8 @@ As a result of my approach, much fewer bugs happened than could have - the code 
 
 **Cause:** Application is sent at the time when customer's email is verified. If the prospect quickly double-clicked the verification link or otherwise sends the request too fast more than once, this would cause double leads. 
 
+**Caught:** investigation of potential security concerns with a bugfix agent revealed this problem.
+
 **Fix:** Added a pending lead id as a deduplication mechanism for such situations.
 
 ---
@@ -72,8 +74,6 @@ From the coordinator and bugfix sessions
 
 > *"Would it be an adequate solution for l1b to have timestamp-based verification — make, say, a 5 min timeout. If a request is not processed in a timeout duration, but they both come from the same email, the second one overrides the first"*  
 > *→ later: "implement that pls"*
-
-
 
 ---
 

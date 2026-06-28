@@ -121,6 +121,61 @@ def client(
 
 
 @pytest.fixture
+def role_client(db_session: Session) -> Generator:
+    """HTTP client with real ``Account`` rows and RBAC enforced.
+
+    Returns a factory ``role_client(role, **create_kwargs) -> (TestClient, Account)``.
+    Unlike ``client``, this does not bypass permission checks — it injects a
+    real account from SQLite so ``require_permission`` reads the true role.
+    """
+
+    from src.core import database, deps
+    from src.core.permissions import Role
+    from src.domains.account.models import Account
+    from src.domains.account.schemas import AccountCreate
+    from src.domains.account.service import AccountService
+
+    holders: list[TestClient] = []
+
+    def _make(role: Role, **overrides: Any) -> tuple[TestClient, Account]:
+        suffix = uuid.uuid4().hex[:8]
+        account = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email=overrides.pop("email", f"{role.value}-{suffix}@firm.com"),
+                password=overrides.pop("password", "test-pass1"),
+                role=role,
+                first_name=overrides.pop("first_name", "Test"),
+                last_name=overrides.pop("last_name", "User"),
+                is_default_assignee=overrides.pop("is_default_assignee", False),
+                **overrides,
+            ),
+        )
+
+        def override_current_account() -> Account:
+            row = db_session.get(Account, account.id)
+            assert row is not None
+            return row
+
+        def override_get_db() -> Generator[Session, None, None]:
+            yield db_session
+
+        app.dependency_overrides[deps.get_current_account] = override_current_account
+        app.dependency_overrides[database.get_db] = override_get_db
+        app.dependency_overrides[deps.get_db] = override_get_db
+
+        test_client = TestClient(app)
+        holders.append(test_client)
+        return test_client, account
+
+    yield _make
+
+    for holder in holders:
+        holder.close()
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

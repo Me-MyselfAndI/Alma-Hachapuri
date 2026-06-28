@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -39,6 +40,7 @@ from src.domains.lead.preconditions import (
 from src.domains.lead.schemas import (
     LeadListParams,
     LeadUpdate,
+    LeadVerificationRequestInput,
     LeadVerificationRequestResponse,
 )
 from src.domains.lead.tokens import hash_verification_token, ensure_utc
@@ -100,6 +102,29 @@ class LeadService:
     """Lead lifecycle — intake, CRUD, transitions, export, archive."""
 
     @staticmethod
+    def parse_verification_request_input(
+        *,
+        first_name: str,
+        last_name: str,
+        email: str,
+        source: str | None = None,
+    ) -> LeadVerificationRequestInput:
+        """Validate L1a form fields; raises HTTP 422 on failure."""
+
+        try:
+            return LeadVerificationRequestInput(
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                source=source,
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+
+    @staticmethod
     def request_verification(
         db: Session,
         *,
@@ -111,7 +136,13 @@ class LeadService:
     ) -> LeadVerificationRequestResponse:
         """L1a — pending row + temp file + verification email; no lead."""
 
-        normalized = normalize_email(email)
+        validated = LeadService.parse_verification_request_input(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            source=source,
+        )
+        normalized = normalize_email(validated.email)
         temp_key: str | None = None
 
         try:
@@ -124,9 +155,9 @@ class LeadService:
 
             pending = LeadIntakePending(
                 email=normalized,
-                first_name=first_name.strip(),
-                last_name=last_name.strip(),
-                source=source,
+                first_name=validated.first_name,
+                last_name=validated.last_name,
+                source=validated.source,
                 temp_resume_storage_key=temp_key,
                 token_hash=token_hash,
                 expires_at=expires_at,
@@ -246,7 +277,7 @@ class LeadService:
             first_name=first_name,
             last_name=last_name,
         )
-        assignee = AccountService.resolve_default_assignee(db)
+        assignee = AccountService.resolve_intake_assignee(db)
         now = _now_utc()
 
         lead = Lead(
@@ -438,13 +469,14 @@ class LeadService:
         *,
         params: LeadListParams,
         current_account_id: UUID | None = None,
-    ) -> str:
+    ) -> tuple[str, int, bool]:
         export_params = params.model_copy(update={"page": 1, "page_size": 10_000})
-        items, _ = LeadService.list_leads(
+        items, total = LeadService.list_leads(
             db,
             params=export_params,
             current_account_id=current_account_id,
         )
+        truncated = total > len(items)
 
         assignee_ids = {lead.assigned_account_id for lead in items if lead.assigned_account_id}
         assignees: dict[UUID, Account] = {}
@@ -455,7 +487,18 @@ class LeadService:
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(
-            ["id", "first_name", "last_name", "email", "state", "source", "assignee", "created_at"]
+            [
+                "id",
+                "first_name",
+                "last_name",
+                "email",
+                "state",
+                "source",
+                "assignee",
+                "state_changed_at",
+                "archived_at",
+                "created_at",
+            ]
         )
         for lead in items:
             assignee_name = ""
@@ -471,10 +514,12 @@ class LeadService:
                     lead.state,
                     lead.source or "",
                     assignee_name,
+                    lead.state_changed_at.isoformat(),
+                    lead.archived_at.isoformat() if lead.archived_at else "",
                     lead.created_at.isoformat(),
                 ]
             )
-        return buffer.getvalue()
+        return buffer.getvalue(), total, truncated
 
     @staticmethod
     def archive_lead(db: Session, *, lead_id: UUID, actor: Account) -> None:

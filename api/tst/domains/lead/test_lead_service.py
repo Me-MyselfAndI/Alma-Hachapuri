@@ -424,3 +424,219 @@ class TestTokenErrors:
 
         assert exc_info.value.status_code == 422
         assert "invalid" in exc_info.value.detail.lower()
+
+
+class TestVerificationInputValidation:
+    def test_invalid_email_raises_422(self, db_session) -> None:
+        with pytest.raises(HTTPException) as exc_info:
+            LeadService.request_verification(
+                db_session,
+                first_name="Jane",
+                last_name="Doe",
+                email="not-an-email",
+                resume=_make_upload(),
+            )
+
+        assert exc_info.value.status_code == 422
+
+    def test_blank_first_name_raises_422(self, db_session) -> None:
+        with pytest.raises(HTTPException) as exc_info:
+            LeadService.request_verification(
+                db_session,
+                first_name="   ",
+                last_name="Doe",
+                email="jane@example.com",
+                resume=_make_upload(),
+            )
+
+        assert exc_info.value.status_code == 422
+
+
+class TestAttorneyWriteScope:
+    def _make_lead_for_attorney(
+        self, db_session, *, attorney: Account, other_attorney: Account | None = None
+    ) -> tuple[Lead, Account]:
+        assignee = other_attorney or attorney
+        prospect_id = uuid.uuid4()
+        from src.domains.prospect.models import Prospect
+
+        prospect = Prospect(
+            id=prospect_id,
+            email="jane@example.com",
+            first_name="Jane",
+            last_name="Doe",
+        )
+        db_session.add(prospect)
+        resume = ResumeFile(
+            storage_key="test.pdf",
+            original_filename="cv.pdf",
+            mime_type=PDF_MIME,
+            size_bytes=100,
+        )
+        db_session.add(resume)
+        db_session.flush()
+
+        now = datetime.now(UTC)
+        lead = Lead(
+            prospect_id=prospect.id,
+            first_name="Jane",
+            last_name="Doe",
+            email="jane@example.com",
+            resume_file_id=resume.id,
+            state=LeadState.PENDING.value,
+            state_changed_at=now,
+            assigned_account_id=assignee.id,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(lead)
+        db_session.commit()
+        db_session.refresh(lead)
+        return lead, attorney
+
+    def test_attorney_cannot_transition_unassigned_lead(self, db_session) -> None:
+        owner = _seed_default_attorney(db_session)
+        other = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="other.attorney@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Other",
+                last_name="Attorney",
+                is_default_assignee=False,
+            ),
+        )
+        lead, _ = self._make_lead_for_attorney(
+            db_session, attorney=other, other_attorney=owner
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            LeadService.transition_lead(
+                db_session,
+                lead_id=lead.id,
+                to_state=LeadState.REACHED_OUT,
+                actor=other,
+            )
+
+        assert exc_info.value.status_code == 403
+
+    def test_attorney_can_transition_own_lead(self, db_session) -> None:
+        attorney = _seed_default_attorney(db_session)
+        lead, actor = self._make_lead_for_attorney(db_session, attorney=attorney)
+
+        updated = LeadService.transition_lead(
+            db_session,
+            lead_id=lead.id,
+            to_state=LeadState.REACHED_OUT,
+            actor=actor,
+        )
+
+        assert updated.state == LeadState.REACHED_OUT.value
+
+    def test_admin_can_transition_any_lead(self, db_session) -> None:
+        attorney = _seed_default_attorney(db_session)
+        admin = _seed_staff(db_session, role=Role.ADMIN)
+        lead, _ = self._make_lead_for_attorney(db_session, attorney=attorney)
+
+        updated = LeadService.transition_lead(
+            db_session,
+            lead_id=lead.id,
+            to_state=LeadState.REACHED_OUT,
+            actor=admin,
+        )
+
+        assert updated.state == LeadState.REACHED_OUT.value
+
+
+class TestIntakeAssigneeLoadBalancing:
+    @patch("src.domains.lead.service.EmailService.send_lead_created_notifications")
+    @patch("src.domains.lead.service.EmailService.send_verification_email")
+    def test_assigns_to_attorney_with_fewest_in_process_leads(
+        self,
+        mock_verify_send,
+        mock_created_send,
+        db_session,
+        uploads_dir,
+    ) -> None:
+        mock_verify_send.return_value = None
+        mock_created_send.return_value = None
+
+        busy = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="busy@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Busy",
+                last_name="Attorney",
+                is_default_assignee=True,
+            ),
+        )
+        light = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="light@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Light",
+                last_name="Attorney",
+                is_default_assignee=False,
+            ),
+        )
+
+        from src.domains.prospect.models import Prospect
+
+        for _ in range(2):
+            prospect = Prospect(
+                id=uuid.uuid4(),
+                email=f"existing-{uuid.uuid4().hex[:6]}@example.com",
+                first_name="Existing",
+                last_name="Lead",
+            )
+            db_session.add(prospect)
+            resume = ResumeFile(
+                storage_key=f"{uuid.uuid4()}.pdf",
+                original_filename="cv.pdf",
+                mime_type=PDF_MIME,
+                size_bytes=100,
+            )
+            db_session.add(resume)
+            db_session.flush()
+            now = datetime.now(UTC)
+            db_session.add(
+                Lead(
+                    prospect_id=prospect.id,
+                    first_name="Existing",
+                    last_name="Lead",
+                    email=prospect.email,
+                    resume_file_id=resume.id,
+                    state=LeadState.PENDING.value,
+                    state_changed_at=now,
+                    assigned_account_id=busy.id,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        db_session.commit()
+
+        LeadService.request_verification(
+            db_session,
+            first_name="Jane",
+            last_name="Doe",
+            email="jane@example.com",
+            resume=_make_upload(),
+        )
+        raw_token = mock_verify_send.call_args.kwargs["token"]
+        lead = LeadService.verify_and_create_lead(db_session, token=raw_token)
+
+        assert lead.assigned_account_id == light.id
+
+    def test_no_active_attorney_returns_503(self, db_session) -> None:
+        from src.domains.account.service import AccountService as AS
+
+        with pytest.raises(HTTPException) as exc_info:
+            AS.resolve_intake_assignee(db_session)
+
+        assert exc_info.value.status_code == 503
+        assert "No active attorney" in exc_info.value.detail

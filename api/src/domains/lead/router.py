@@ -20,6 +20,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
@@ -100,12 +101,24 @@ def _build_lead_read(db: Session, lead: Lead) -> LeadRead:
     )
 
 
-def _build_list_item(db: Session, lead: Lead) -> LeadListItem:
+def _assignee_name_map(db: Session, leads: list[Lead]) -> dict[UUID, str]:
+    """Batch-load assignee display names for list/export rows."""
+
+    assignee_ids = {lead.assigned_account_id for lead in leads if lead.assigned_account_id}
+    if not assignee_ids:
+        return {}
+
+    accounts = db.scalars(select(Account).where(Account.id.in_(assignee_ids)))
+    return {
+        account.id: f"{account.first_name} {account.last_name}"
+        for account in accounts
+    }
+
+
+def _build_list_item(lead: Lead, assignee_names: dict[UUID, str]) -> LeadListItem:
     assignee_name = None
     if lead.assigned_account_id:
-        account = db.get(Account, lead.assigned_account_id)
-        if account:
-            assignee_name = f"{account.first_name} {account.last_name}"
+        assignee_name = assignee_names.get(lead.assigned_account_id)
 
     return LeadListItem(
         id=lead.id,
@@ -214,15 +227,21 @@ def export_leads(
         mine=mine,
         include_archived=include_archived,
     )
-    csv_data = LeadService.export_leads_csv(
+    csv_data, total, truncated = LeadService.export_leads_csv(
         db,
         params=params,
         current_account_id=account.id,
     )
+    headers: dict[str, str] = {
+        "Content-Disposition": 'attachment; filename="leads.csv"',
+        "X-Export-Total-Count": str(total),
+    }
+    if truncated:
+        headers["X-Export-Truncated"] = "true"
     return Response(
         content=csv_data,
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="leads.csv"'},
+        headers=headers,
     )
 
 
@@ -254,8 +273,9 @@ def list_leads(
         params=params,
         current_account_id=account.id,
     )
+    assignee_names = _assignee_name_map(db, items)
     return Paginated[LeadListItem](
-        items=[_build_list_item(db, lead) for lead in items],
+        items=[_build_list_item(lead, assignee_names) for lead in items],
         total=total,
         page=page,
         page_size=page_size,

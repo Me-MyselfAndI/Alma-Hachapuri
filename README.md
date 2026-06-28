@@ -22,10 +22,10 @@ From the **repo root** (clone anywhere — no fixed drive path):
 
 ```powershell
 python scripts/setup.py   # once: venv, pip, npm, .env
-python scripts/start.py    # Docker + migrations + API + webapp
+python scripts/dev.py run --target both   # Docker + migrations + API + webapp
 ```
 
-Or: `npm run setup` then `npm start`
+Or: `npm run setup` then `npm run dev` (full stack). Aliases: `npm start` / `python scripts/start.py`. Test and build: `npm test`, `npm run build`. See [docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md).
 
 Stop with **Ctrl+C**.
 

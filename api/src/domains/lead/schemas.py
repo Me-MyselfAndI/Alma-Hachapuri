@@ -9,7 +9,8 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic.types import StringConstraints
 
 from src.domains.account.schemas import Paginated
 from src.domains.lead.preconditions import LeadState
@@ -21,6 +22,32 @@ class LeadVerificationRequestResponse(BaseModel):
 
     message: str = "Check your email to confirm your submission."
     email: EmailStr
+
+
+class LeadVerificationRequestInput(BaseModel):
+    """Validated L1a form fields (multipart body)."""
+
+    first_name: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    last_name: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    email: EmailStr
+    source: Annotated[str | None, StringConstraints(max_length=200)] = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def _strip_required_names(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def _strip_optional_source(cls, value: object) -> object | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
 
 class LeadVerifyRequest(BaseModel):
@@ -139,6 +166,7 @@ __all__ = [
     "LeadRead",
     "LeadTransitionRequest",
     "LeadUpdate",
+    "LeadVerificationRequestInput",
     "LeadVerificationRequestResponse",
     "LeadVerifyRequest",
     "Paginated",

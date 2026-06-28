@@ -42,9 +42,18 @@ from src.domains.account.schemas import (
     AccountCreate,
     AccountUpdate,
 )
+from src.domains.lead.models import Lead
+from src.domains.lead.preconditions import LeadState
 
 
 logger = logging.getLogger(__name__)
+
+# Active pipeline states — used when load-balancing new lead assignment.
+_IN_PROCESS_LEAD_STATES = (
+    LeadState.PENDING.value,
+    LeadState.REACHED_OUT.value,
+    LeadState.QUALIFIED.value,
+)
 
 
 def _normalize_email(email: str) -> str:
@@ -189,17 +198,61 @@ class AccountService:
         return account
 
     @staticmethod
-    def resolve_default_assignee(db: Session) -> Account:
-        """Return the active attorney with ``is_default_assignee=true`` (S3 / F6.1).
+    def resolve_intake_assignee(db: Session) -> Account:
+        """Pick the active attorney with the fewest in-process leads (F6.1).
 
-        Raises HTTP 500 when misconfigured (D4): no qualifying row, or the
-        default assignee is inactive.
+        In-process = ``PENDING``, ``REACHED_OUT``, or ``QUALIFIED``, excluding
+        archived rows. Ties break on earliest ``Account.created_at``.
+
+        Raises HTTP 503 when no active attorney exists — expected in normal
+        operation after seed/admin setup.
+        """
+
+        attorneys = list(
+            db.scalars(
+                select(Account)
+                .where(
+                    Account.role == Role.ATTORNEY.value,
+                    Account.is_active.is_(True),
+                )
+                .order_by(Account.created_at.asc())
+            )
+        )
+        if not attorneys:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No active attorney available for lead assignment",
+            )
+
+        if len(attorneys) == 1:
+            return attorneys[0]
+
+        attorney_ids = [a.id for a in attorneys]
+        counts_stmt = (
+            select(Lead.assigned_account_id, func.count())
+            .where(
+                Lead.assigned_account_id.in_(attorney_ids),
+                Lead.state.in_(_IN_PROCESS_LEAD_STATES),
+                Lead.archived_at.is_(None),
+            )
+            .group_by(Lead.assigned_account_id)
+        )
+        counts = {row[0]: int(row[1]) for row in db.execute(counts_stmt)}
+
+        return min(attorneys, key=lambda a: (counts.get(a.id, 0), a.created_at))
+
+    @staticmethod
+    def resolve_default_assignee(db: Session) -> Account:
+        """Return the active attorney with ``is_default_assignee=true`` (admin D4).
+
+        Used by admin guards and legacy checks — **not** for auto-assign on
+        intake (see ``resolve_intake_assignee``).
         """
 
         stmt = select(Account).where(
             Account.role == Role.ATTORNEY.value,
             Account.is_default_assignee.is_(True),
-        )
+        ).order_by(Account.created_at.asc())
         account = db.scalar(stmt)
         if account is None:
             raise HTTPException(

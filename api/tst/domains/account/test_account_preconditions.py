@@ -240,3 +240,88 @@ class TestResolveDefaultAssigneeActiveCheck:
             AccountService.resolve_default_assignee(db_session)
 
         assert exc_info.value.status_code == 500
+
+
+class TestResolveIntakeAssignee:
+    """Auto-assign on lead create — fewest in-process leads among active attorneys."""
+
+    def test_picks_attorney_with_fewest_in_process_leads(self, db_session) -> None:
+        import uuid
+        from datetime import datetime, timezone
+
+        from src.core.permissions import Role
+        from src.domains.account.schemas import AccountCreate
+        from src.domains.account.service import AccountService
+        from src.domains.lead.models import Lead
+        from src.domains.lead.preconditions import LeadState
+        from src.domains.prospect.models import Prospect
+        from src.domains.resume_file.models import ResumeFile
+
+        busy = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="busy@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Busy",
+                last_name="Attorney",
+                is_default_assignee=True,
+            ),
+        )
+        light = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="light@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Light",
+                last_name="Attorney",
+                is_default_assignee=False,
+            ),
+        )
+
+        prospect = Prospect(
+            id=uuid.uuid4(),
+            email="existing@example.com",
+            first_name="Existing",
+            last_name="Lead",
+        )
+        db_session.add(prospect)
+        resume = ResumeFile(
+            storage_key="busy.pdf",
+            original_filename="cv.pdf",
+            mime_type="application/pdf",
+            size_bytes=100,
+        )
+        db_session.add(resume)
+        db_session.flush()
+        now = datetime.now(timezone.utc)
+        db_session.add(
+            Lead(
+                prospect_id=prospect.id,
+                first_name="Existing",
+                last_name="Lead",
+                email=prospect.email,
+                resume_file_id=resume.id,
+                state=LeadState.PENDING.value,
+                state_changed_at=now,
+                assigned_account_id=busy.id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db_session.commit()
+
+        assignee = AccountService.resolve_intake_assignee(db_session)
+
+        assert assignee.id == light.id
+
+    def test_fails_with_503_when_no_active_attorney(self, db_session) -> None:
+        from fastapi import HTTPException
+        from src.domains.account.service import AccountService
+
+        with pytest.raises(HTTPException) as exc_info:
+            AccountService.resolve_intake_assignee(db_session)
+
+        assert exc_info.value.status_code == 503
+        assert "No active attorney" in exc_info.value.detail

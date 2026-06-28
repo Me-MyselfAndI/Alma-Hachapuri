@@ -45,6 +45,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
         {
             Permission.READ_LEADS.value,
             Permission.WRITE_LEAD.value,
+            Permission.SEND_EMAIL.value,
             Permission.READ_EMAILS.value,
             Permission.EXPORT_LEADS.value,
         }

@@ -33,7 +33,9 @@ EXPECTED_MATRIX: dict[Role, frozenset[str]] = {
             "export_leads",
         }
     ),
-    Role.ATTORNEY: frozenset({"read_leads", "write_lead", "read_emails", "export_leads"}),
+    Role.ATTORNEY: frozenset(
+        {"read_leads", "write_lead", "send_email", "read_emails", "export_leads"}
+    ),
     Role.INTAKE_COORDINATOR: frozenset(
         {
             "read_leads",
@@ -74,8 +76,10 @@ def test_role_matrix_matches_permission_md(role: Role) -> None:
 
 def test_attorney_permissions_count() -> None:
     keys = permissions_for_role("attorney")
-    assert keys == frozenset({"read_leads", "write_lead", "read_emails", "export_leads"})
-    assert len(keys) == 4
+    assert keys == frozenset(
+        {"read_leads", "write_lead", "send_email", "read_emails", "export_leads"}
+    )
+    assert len(keys) == 5
 
 
 def test_permissions_for_role_accepts_enum_and_string() -> None:

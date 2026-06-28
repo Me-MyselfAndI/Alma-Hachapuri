@@ -5,6 +5,7 @@ Spec: docs/entities/email-notification.md.
 
 from __future__ import annotations
 
+import html
 import logging
 import smtplib
 import uuid
@@ -27,8 +28,6 @@ from src.domains.email.preconditions import (
     pick_conversation_id,
 )
 from src.domains.lead.models import Lead, LeadIntakePending
-from src.domains.lead.preconditions import VerificationTokenError, check_verification_token
-from src.domains.lead.tokens import reissue_verification_token, ensure_utc
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ class EmailService:
 
     TEMPLATE_CATALOG: dict[str, dict[str, str]] = {
         "email_verification": {
-            "description": "Verify email before lead creation",
+            "description": "Verify email before lead creation (public form only — not staff-retryable)",
             "default_recipient": "pending_intake",
         },
         "prospect_confirmation": {
@@ -116,6 +115,64 @@ class EmailService:
             return subject, html
 
         raise ValueError(f"Unknown email template: {template}")
+
+    @staticmethod
+    def render_template_plain(template: str, context: dict[str, Any]) -> tuple[str, str]:
+        """Return ``(subject, plain_body)`` for staff-editable templates."""
+
+        if template == "prospect_confirmation":
+            first_name = context.get("first_name", "there")
+            return (
+                "We received your submission",
+                f"Hi {first_name},\n\n"
+                "Thank you — we received your submission and will be in touch soon.",
+            )
+
+        if template == "prospect_follow_up":
+            first_name = context.get("first_name", "there")
+            return (
+                "Follow-up on your submission",
+                f"Hi {first_name},\n\n"
+                "We wanted to follow up regarding your recent submission.",
+            )
+
+        raise ValueError(f"Template not available for plain preview: {template}")
+
+    @staticmethod
+    def plain_text_to_html(text: str) -> str:
+        """Wrap staff-edited plain text as safe HTML paragraphs."""
+
+        stripped = text.strip()
+        if not stripped:
+            return "<p></p>"
+        paragraphs = [p.strip() for p in stripped.split("\n\n") if p.strip()]
+        parts: list[str] = []
+        for paragraph in paragraphs:
+            escaped = html.escape(paragraph).replace("\n", "<br>")
+            parts.append(f"<p>{escaped}</p>")
+        return "".join(parts)
+
+    @staticmethod
+    def preview_staff_email(
+        db: Session, *, lead_id: UUID, template: str
+    ) -> tuple[str, str]:
+        """Return default subject + plain body for a staff send template."""
+
+        if template not in EmailService.STAFF_TEMPLATES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Template not allowed for staff send: {template}",
+            )
+
+        lead = db.get(Lead, lead_id)
+        if lead is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lead not found",
+            )
+
+        context = EmailService._build_lead_context(db, lead=lead, template=template)
+        return EmailService.render_template_plain(template, context)
 
     @staticmethod
     def _send_smtp(*, recipient: str, subject: str, html_body: str) -> None:
@@ -461,6 +518,8 @@ class EmailService:
         recipient: str | None = None,
         context: dict[str, Any] | None = None,
         conversation_id: UUID | None = None,
+        subject_override: str | None = None,
+        body_override: str | None = None,
     ) -> EmailNotification:
         """E2 — render template, send via SMTP, update status."""
 
@@ -490,6 +549,23 @@ class EmailService:
             db, lead=lead, template=template
         )
         subject, html_body = EmailService.render_template(template, render_context)
+
+        if subject_override is not None:
+            subject = subject_override.strip()
+            if not subject:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Subject cannot be empty",
+                )
+
+        if body_override is not None:
+            body = body_override.strip()
+            if not body:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Message body cannot be empty",
+                )
+            html_body = EmailService.plain_text_to_html(body)
 
         notification = EmailNotification(
             lead_id=lead_id,
@@ -527,6 +603,15 @@ class EmailService:
                 detail="Only failed notifications can be retried",
             )
 
+        if notification.template == "email_verification":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Verification emails cannot be retried by staff; "
+                    "the applicant must submit the form again"
+                ),
+            )
+
         if notification.lead_id is not None:
             lead = db.get(Lead, notification.lead_id)
             if lead is None:
@@ -537,30 +622,6 @@ class EmailService:
             context = EmailService._build_lead_context(
                 db, lead=lead, template=notification.template
             )
-        elif notification.template == "email_verification":
-            pending = db.get(LeadIntakePending, notification.pending_intake_id)
-            if pending is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Cannot retry verification email without pending intake",
-                )
-            now = datetime.now(timezone.utc)
-            token_err = check_verification_token(
-                expires_at=ensure_utc(pending.expires_at),
-                used_at=ensure_utc(pending.used_at) if pending.used_at else None,
-                now=now,
-            )
-            if token_err is VerificationTokenError.ALREADY_USED:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Verification token already used; cannot retry",
-                )
-            raw_token = reissue_verification_token(db, pending)
-            context = {
-                "first_name": pending.first_name,
-                "verify_url": f"{settings.webapp_url}/verify?token={raw_token}",
-                "expires_at": pending.expires_at.isoformat(),
-            }
         else:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

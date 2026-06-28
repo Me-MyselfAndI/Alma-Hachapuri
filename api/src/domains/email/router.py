@@ -20,6 +20,8 @@ from src.core.deps import get_db, require_any_permission, require_permission
 from src.domains.email.preconditions import lead_emails_accessible
 from src.domains.email.schemas import (
     EmailNotificationRead,
+    EmailPreviewRequest,
+    EmailPreviewResponse,
     EmailSendRequest,
     EmailTemplateInfo,
     Paginated,
@@ -58,6 +60,23 @@ def list_lead_emails(
 
 
 @lead_emails_router.post(
+    "/{lead_id}/emails/preview",
+    response_model=EmailPreviewResponse,
+    summary="PreviewStaffEmail",
+)
+def preview_staff_email(
+    lead_id: UUID,
+    body: EmailPreviewRequest,
+    db: Session = Depends(get_db),
+    _account: Any = Depends(require_permission("send_email")),
+) -> EmailPreviewResponse:
+    subject, plain_body = EmailService.preview_staff_email(
+        db, lead_id=lead_id, template=body.template
+    )
+    return EmailPreviewResponse(subject=subject, body=plain_body)
+
+
+@lead_emails_router.post(
     "/{lead_id}/emails",
     response_model=EmailNotificationRead,
     status_code=status.HTTP_201_CREATED,
@@ -75,6 +94,8 @@ def send_staff_email(
         template=body.template,
         recipient=body.recipient,
         conversation_id=body.conversation_id,
+        subject_override=body.subject,
+        body_override=body.body,
     )
     db.commit()
     db.refresh(notification)

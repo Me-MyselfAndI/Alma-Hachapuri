@@ -48,6 +48,19 @@ class EmailSendRequest(BaseModel):
     template: str = Field(..., min_length=1, max_length=100)
     recipient: EmailStr | None = None
     conversation_id: UUID | None = None
+    subject: str | None = Field(None, min_length=1, max_length=200)
+    body: str | None = Field(None, min_length=1, max_length=10000)
+
+
+class EmailPreviewRequest(BaseModel):
+    """Default subject + body for a staff send template."""
+
+    template: str = Field(..., min_length=1, max_length=100)
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    body: str
 
 
 class EmailTemplateInfo(BaseModel):

@@ -22,22 +22,41 @@ def _run(cmd: list[str], *, cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, check=True)
 
 
+def _venv_python(venv: Path) -> Path:
+    if sys.platform == "win32":
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
+
+
+def _venv_usable(py: Path) -> bool:
+    if not py.is_file():
+        return False
+    result = subprocess.run(
+        [str(py), "-m", "pip", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _ensure_venv(venv: Path, *, cwd: Path) -> Path:
+    py = _venv_python(venv)
+    if venv.is_dir() and not _venv_usable(py):
+        print(f"Removing stale venv at {venv.relative_to(REPO_ROOT)} (broken pip/python paths)")
+        shutil.rmtree(venv)
+    if not venv.is_dir():
+        _run([sys.executable, "-m", "venv", str(venv)], cwd=cwd)
+    return _venv_python(venv)
+
+
 def main() -> None:
     api = REPO_ROOT / "api"
     webapp = REPO_ROOT / "webapp"
     venv = api / ".venv"
 
-    if not venv.is_dir():
-        _run([sys.executable, "-m", "venv", str(venv)], cwd=api)
-
-    if sys.platform == "win32":
-        py = venv / "Scripts" / "python.exe"
-        pip = venv / "Scripts" / "pip.exe"
-    else:
-        py = venv / "bin" / "python"
-        pip = venv / "bin" / "pip"
-
-    _run([str(pip), "install", "-r", "requirements.txt"], cwd=api)
+    py = _ensure_venv(venv, cwd=api)
+    # Use ``python -m pip`` — avoids broken pip.exe launchers after folder renames.
+    _run([str(py), "-m", "pip", "install", "-r", "requirements.txt"], cwd=api)
 
     env_example = REPO_ROOT / ".env.example"
     env_file = REPO_ROOT / ".env"
@@ -56,7 +75,7 @@ def main() -> None:
     npm = "npm.cmd" if sys.platform == "win32" else "npm"
     _run([npm, "install"], cwd=webapp)
 
-    print("\nSetup complete. Start the app with:  python scripts/start.py")
+    print("\nSetup complete. Start the app with:  python scripts/dev.py run --target both")
 
 
 if __name__ == "__main__":

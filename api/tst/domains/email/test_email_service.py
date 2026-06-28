@@ -18,7 +18,6 @@ from src.domains.email.models import EmailNotification
 from src.domains.email.preconditions import EmailStatus
 from src.domains.email.service import EmailDeliveryError, EmailService
 from src.domains.lead.models import Lead, LeadIntakePending
-from src.domains.lead.tokens import ensure_utc
 from src.domains.prospect.models import Prospect
 from src.domains.resume_file.models import ResumeFile
 
@@ -306,7 +305,7 @@ class TestRetryFailed:
         assert exc.value.status_code == 409
 
     @patch("src.domains.email.service.EmailService._send_smtp")
-    def test_retry_verification_reissues_token(
+    def test_retry_rejects_verification_email(
         self, mock_smtp: MagicMock, db_session: Session
     ) -> None:
         pending = LeadIntakePending(
@@ -315,7 +314,7 @@ class TestRetryFailed:
             last_name="Doe",
             temp_resume_storage_key="temp/x.pdf",
             token_hash="old-hash",
-            expires_at=datetime.now(UTC) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         db_session.add(pending)
         db_session.flush()
@@ -330,18 +329,13 @@ class TestRetryFailed:
         )
         db_session.add(row)
         db_session.flush()
-        old_hash = pending.token_hash
 
-        updated = EmailService.retry_failed(db_session, row.id)
-        db_session.commit()
-        db_session.refresh(pending)
+        with pytest.raises(HTTPException) as exc:
+            EmailService.retry_failed(db_session, row.id)
 
-        assert updated.status == EmailStatus.SENT.value
-        assert pending.token_hash != old_hash
-        assert ensure_utc(pending.expires_at) > datetime.now(UTC) - timedelta(minutes=5)
-        html = mock_smtp.call_args.kwargs["html_body"]
-        assert "RETRY_NOT_AVAILABLE" not in html
-        assert "/verify?token=" in html
+        assert exc.value.status_code == 409
+        assert "submit the form again" in exc.value.detail.lower()
+        mock_smtp.assert_not_called()
 
 
 class TestSendTemplate:
@@ -371,5 +365,55 @@ class TestSendTemplate:
                 db_session,
                 lead_id=lead.id,
                 template="email_verification",
+            )
+        assert exc.value.status_code == 422
+
+    @patch("src.domains.email.service.EmailService._send_smtp")
+    def test_staff_send_accepts_subject_and_body_overrides(
+        self, mock_smtp: MagicMock, db_session: Session
+    ) -> None:
+        lead = _make_lead(db_session, first_name="Jane")
+        notification = EmailService.send_template(
+            db_session,
+            lead_id=lead.id,
+            template="prospect_follow_up",
+            subject_override="Checking in",
+            body_override="Hi Jane,\n\nJust following up on your application.",
+        )
+
+        assert notification.subject == "Checking in"
+        assert notification.status == EmailStatus.SENT.value
+        mock_smtp.assert_called_once()
+        assert "Just following up" in mock_smtp.call_args.kwargs["html_body"]
+        assert "Jane" in mock_smtp.call_args.kwargs["html_body"]
+
+    def test_staff_send_rejects_empty_subject_override(self, db_session: Session) -> None:
+        lead = _make_lead(db_session)
+        with pytest.raises(HTTPException) as exc:
+            EmailService.send_template(
+                db_session,
+                lead_id=lead.id,
+                template="prospect_follow_up",
+                subject_override="   ",
+            )
+        assert exc.value.status_code == 422
+
+
+class TestPreviewStaffEmail:
+    def test_preview_follow_up_includes_lead_first_name(
+        self, db_session: Session
+    ) -> None:
+        lead = _make_lead(db_session, first_name="Jane")
+        subject, body = EmailService.preview_staff_email(
+            db_session, lead_id=lead.id, template="prospect_follow_up"
+        )
+        assert subject == "Follow-up on your submission"
+        assert "Jane" in body
+
+    def test_preview_rejects_unknown_template(self, db_session: Session) -> None:
+        lead = _make_lead(db_session)
+        with pytest.raises(HTTPException) as exc:
+            EmailService.preview_staff_email(
+                db_session, lead_id=lead.id, template="email_verification"
             )
         assert exc.value.status_code == 422

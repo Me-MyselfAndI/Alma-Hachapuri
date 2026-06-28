@@ -129,6 +129,32 @@ def test_valid_token_returns_account() -> None:
     assert response.json()["id"] == str(account.id)
 
 
+def test_stale_token_permissions_rejected() -> None:
+    account = _FakeAccount(role="attorney")
+    app = _build_app(account=account)
+    client = TestClient(app)
+    stale = create_access_token(
+        account.id,
+        role="attorney",
+        permissions=sorted(ROLE_PERMISSIONS[Role.ADMIN]),
+    )
+    response = client.get("/me", headers={"Authorization": f"Bearer {stale}"})
+    assert response.status_code == 401
+
+
+def test_stale_token_role_rejected() -> None:
+    account = _FakeAccount(role="attorney")
+    app = _build_app(account=account)
+    client = TestClient(app)
+    stale = create_access_token(
+        account.id,
+        role="admin",
+        permissions=sorted(ROLE_PERMISSIONS[Role.ATTORNEY]),
+    )
+    response = client.get("/me", headers={"Authorization": f"Bearer {stale}"})
+    assert response.status_code == 401
+
+
 def test_require_permission_grants_when_role_has_key() -> None:
     account = _FakeAccount(role="attorney")
     app = _build_app(account=account)

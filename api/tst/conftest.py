@@ -180,6 +180,39 @@ def role_client(db_session: Session) -> Generator:
 
 
 @pytest.fixture
+def jwt_client(db_session: Session) -> Generator[TestClient, None, None]:
+    """HTTP client with SQLite DB and **real** JWT auth (no get_current_account override)."""
+
+    from src.core import database, deps
+
+    def override_get_db() -> Generator[Session, None, None]:
+        yield db_session
+
+    app.dependency_overrides[database.get_db] = override_get_db
+    app.dependency_overrides[deps.get_db] = override_get_db
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+def issue_token(client: TestClient, email: str, password: str) -> str:
+    """Login via A1 and return a bearer token."""
+
+    response = client.post(
+        "/api/v1/auth/token",
+        data={"username": email, "password": password},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
+
+
+def auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

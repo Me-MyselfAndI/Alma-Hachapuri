@@ -250,6 +250,8 @@ docs/                Architecture, requirements, feature status
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Flow diagrams and design |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Original brief |
 | [docs/FEATURES.md](docs/FEATURES.md) | What is built vs deferred |
+| [docs/AGENT_USAGE_SUBMISSION.md](docs/AGENT_USAGE_SUBMISSION.md) | Coding-agent usage writeup (assessment) |
+| [NOTES.md](NOTES.md) | Agent-generated vs hand-written code attribution |
 
 <details>
 <summary>For developers — automated checks</summary>

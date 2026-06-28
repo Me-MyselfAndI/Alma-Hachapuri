@@ -22,8 +22,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.deps import get_current_account, get_db, require_permission
+from src.core.deps import get_current_account, get_db, oauth2_scheme, require_permission
 from src.core.permissions import Role, account_has_permission, permissions_for_role
+from src.core.security import decode_access_token
 from src.domains.account.models import Account
 from src.domains.account.schemas import (
     AccountCreate,
@@ -33,6 +34,7 @@ from src.domains.account.schemas import (
     AccountRead,
     AccountUpdate,
     Paginated,
+    SessionDiagnostics,
     TokenResponse,
 )
 from src.domains.account.service import AccountService, AuthService
@@ -83,6 +85,36 @@ def login(
 )
 def get_me(account: Account = Depends(get_current_account)) -> AccountMe:
     return _to_me(account)
+
+
+@auth_router.get(
+    "/diagnostics",
+    response_model=SessionDiagnostics,
+    summary="SessionDiagnostics (troubleshoot auth)",
+)
+def session_diagnostics(
+    account: Account = Depends(get_current_account),
+    token: str = Depends(oauth2_scheme),
+) -> SessionDiagnostics:
+    """Side-by-side view of DB role, code matrix, JWT claims, and ``/me`` permissions."""
+
+    payload = decode_access_token(token)
+    me = _to_me(account)
+    matrix = sorted(permissions_for_role(account.role))
+    jwt_role = payload.get("role")
+    jwt_permissions = sorted(payload.get("permissions") or [])
+
+    return SessionDiagnostics(
+        account_id=account.id,
+        email=account.email,
+        db_role=account.role,
+        permissions_from_db_role=matrix,
+        jwt_role=str(jwt_role) if jwt_role is not None else None,
+        jwt_permissions=jwt_permissions,
+        jwt_matches_db=(jwt_role == account.role and jwt_permissions == matrix),
+        me_permissions=me.permissions,
+        me_permissions_match_matrix=(me.permissions == matrix),
+    )
 
 
 @auth_router.patch(

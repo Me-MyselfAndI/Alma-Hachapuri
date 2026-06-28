@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { LoginForm } from "@/components/staff/login/LoginForm";
+import { LoginSessionBanner } from "@/components/staff/login/LoginSessionBanner";
 import { ThemeControls } from "@/components/theme/ThemeControls";
 import {
   Card,
@@ -32,6 +33,9 @@ export default function LoginPage() {
             <CardTitle className="font-heading text-2xl">Staff sign in</CardTitle>
           </CardHeader>
           <CardContent>
+            <Suspense fallback={null}>
+              <LoginSessionBanner />
+            </Suspense>
             <Suspense fallback={<LoginFormFallback />}>
               <LoginForm />
             </Suspense>

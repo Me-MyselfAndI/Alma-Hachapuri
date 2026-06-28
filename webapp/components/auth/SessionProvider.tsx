@@ -11,11 +11,13 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageLoader } from "@/components/ui/page-loader";
 
+import { AUTH_SESSION_CHANGED_KEY } from "@/lib/auth-session";
 import type { AccountMe } from "@/lib/types";
 
 type SessionContextValue = {
   user: AccountMe;
-  refresh: () => Promise<boolean>;
+  /** Re-fetch /api/auth/me; returns the latest user or null if signed out. */
+  refresh: () => Promise<AccountMe | null>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -44,15 +46,18 @@ export function SessionProvider({ children }: SessionProviderProps) {
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
 
-  const refresh = useCallback(async (): Promise<boolean> => {
-    const res = await fetch("/api/auth/me", { credentials: "include" });
+  const refresh = useCallback(async (): Promise<AccountMe | null> => {
+    const res = await fetch("/api/auth/me", {
+      credentials: "include",
+      cache: "no-store",
+    });
     if (!res.ok) {
       setUser(null);
-      return false;
+      return null;
     }
     const data = (await res.json()) as AccountMe;
     setUser(data);
-    return true;
+    return data;
   }, []);
 
   useEffect(() => {
@@ -60,13 +65,14 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
     async function bootstrap() {
       setLoading(true);
-      const ok = await refresh();
-      if (cancelled) return;
+      setUser(null);
+      const me = await refresh();
+      if (cancelled) {
+        return;
+      }
 
-      if (!ok) {
-        router.replace(
-          `/login?next=${encodeURIComponent(currentPath)}`,
-        );
+      if (!me) {
+        router.replace(`/login?next=${encodeURIComponent(currentPath)}`);
       }
       setLoading(false);
     }
@@ -77,6 +83,28 @@ export function SessionProvider({ children }: SessionProviderProps) {
       cancelled = true;
     };
   }, [currentPath, refresh, router]);
+
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key === AUTH_SESSION_CHANGED_KEY) {
+        void refresh();
+      }
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refresh]);
 
   if (loading) {
     return <PageLoader label="Loading your session…" fullScreen />;

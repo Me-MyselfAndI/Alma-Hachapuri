@@ -15,5 +15,9 @@ export async function GET() {
   }
 
   const user = (await upstream.json()) as AccountMe;
-  return NextResponse.json(user);
+  return NextResponse.json(user, {
+    headers: {
+      "Cache-Control": "no-store",
+    },
+  });
 }

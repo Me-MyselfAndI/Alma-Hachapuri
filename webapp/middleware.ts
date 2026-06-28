@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { tokenHasPermission } from "@/lib/access";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
 
 export function middleware(request: NextRequest) {
@@ -13,8 +14,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (pathname === "/login" && token) {
+  if (
+    pathname.startsWith("/admin") &&
+    token &&
+    !tokenHasPermission(token, "manage_users")
+  ) {
     return NextResponse.redirect(new URL("/leads", request.url));
+  }
+
+  if (pathname.startsWith("/api/v1/") && !token) {
+    return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
   }
 
   if (pathname.startsWith("/api/v1/") && token) {

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { isNextResponse, requireManageUsersSession } from "@/lib/api-session";
 import { serverFetch } from "@/lib/api";
 
 export async function GET(request: NextRequest) {
+  const session = await requireManageUsersSession();
+  if (isNextResponse(session)) {
+    return session;
+  }
+
   const search = request.nextUrl.search;
   const upstream = await serverFetch(`/api/v1/accounts${search}`);
 
@@ -19,6 +25,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const session = await requireManageUsersSession();
+  if (isNextResponse(session)) {
+    return session;
+  }
+
   const search = request.nextUrl.search;
   const body = await request.text();
   const upstream = await serverFetch(`/api/v1/accounts${search}`, {
@@ -39,6 +50,11 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await requireManageUsersSession();
+  if (isNextResponse(session)) {
+    return session;
+  }
+
   const search = request.nextUrl.search;
   const body = await request.text();
   const upstream = await serverFetch(`/api/v1/accounts${search}`, {

@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
-from src.core.permissions import account_has_permission
+from src.core.permissions import account_has_permission, permissions_for_role
 from src.core.security import decode_access_token
 from src.domains.account.models import Account
 
@@ -71,6 +71,17 @@ def get_current_account(
 
     if not account.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive account")
+
+    # Reject tokens whose embedded claims drift from the live DB role / matrix.
+    # Clients must re-login after role or permission changes (JWT is not revocable in v1).
+    jwt_role = payload.get("role")
+    if jwt_role != account.role:
+        raise _CREDENTIALS_EXCEPTION
+
+    expected_permissions = sorted(permissions_for_role(account.role))
+    jwt_permissions = sorted(payload.get("permissions") or [])
+    if jwt_permissions != expected_permissions:
+        raise _CREDENTIALS_EXCEPTION
 
     return account
 

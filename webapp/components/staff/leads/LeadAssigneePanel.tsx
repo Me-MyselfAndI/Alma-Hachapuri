@@ -3,9 +3,11 @@
 import { Check, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState, startTransition } from "react";
 
-import type { AccountMe, AccountRead, LeadRead, Paginated } from "@/lib/types";
+import { useSession } from "@/components/auth/SessionProvider";
+import { canReassignLeads, hasPermission } from "@/lib/access";
 import { formatStaffApiError, staffFetch } from "@/lib/staff-api";
 import { getPermissionMessage } from "@/lib/permission-messages";
+import type { AccountRead, LeadRead, Paginated } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,7 +31,6 @@ import {
 
 type LeadAssigneePanelProps = {
   lead: LeadRead;
-  user: AccountMe;
   onLeadUpdated: (lead: LeadRead) => void;
 };
 
@@ -72,11 +73,10 @@ function LoadingRows() {
 
 export function LeadAssigneePanel({
   lead,
-  user,
   onLeadUpdated,
 }: LeadAssigneePanelProps) {
-  const canAssign = user.permissions.includes("assign_lead");
-  const canManageUsers = user.permissions.includes("manage_users");
+  const { user, refresh } = useSession();
+  const canAssign = canReassignLeads(user);
 
   const [assignees, setAssignees] = useState<AssigneeRow[]>([]);
   const [loadingAssignees, setLoadingAssignees] = useState(true);
@@ -85,8 +85,10 @@ export function LeadAssigneePanel({
   const [error, setError] = useState<string | null>(null);
 
   const loadAssignees = useCallback(async () => {
-    if (!canAssign) {
+    const currentUser = await refresh();
+    if (!currentUser || !canReassignLeads(currentUser)) {
       setLoadingAssignees(false);
+      setAssignees([]);
       return;
     }
 
@@ -98,7 +100,7 @@ export function LeadAssigneePanel({
       "/api/v1/accounts?for_assignment=true&page_size=100",
     );
 
-    if (!result.ok && canManageUsers) {
+    if (!result.ok && hasPermission(currentUser, "manage_users")) {
       result = await staffFetch<Paginated<AccountRead>>(
         "/api/v1/accounts?role=attorney&page_size=100",
       );
@@ -119,7 +121,7 @@ export function LeadAssigneePanel({
 
     const active = result.data.items.filter((account) => account.is_active);
     setAssignees(active.map(toAssigneeRow));
-  }, [canAssign, canManageUsers]);
+  }, [refresh]);
 
   useEffect(() => {
     startTransition(() => {
@@ -129,6 +131,12 @@ export function LeadAssigneePanel({
 
   const handleAssign = async (assigneeId: string) => {
     if (assigneeId === lead.assigned_account_id || assigningId) {
+      return;
+    }
+
+    const currentUser = await refresh();
+    if (!currentUser || !canReassignLeads(currentUser)) {
+      setError(getPermissionMessage("assign_lead"));
       return;
     }
 

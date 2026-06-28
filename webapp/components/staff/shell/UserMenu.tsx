@@ -1,17 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { redirectAfterAuthChange } from "@/lib/auth-session";
+import { roleLabel } from "@/lib/access";
+import type { AccountMe } from "@/lib/types";
 
 type UserMenuProps = {
   email: string;
+  role: AccountMe["role"];
 };
 
-export function UserMenu({ email }: UserMenuProps) {
-  const router = useRouter();
+export function UserMenu({ email, role }: UserMenuProps) {
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -21,9 +23,8 @@ export function UserMenu({ email }: UserMenuProps) {
         method: "POST",
         credentials: "include",
       });
-      router.push("/login");
-      router.refresh();
-    } finally {
+      redirectAfterAuthChange("/login");
+    } catch {
       setLoggingOut(false);
     }
   }
@@ -31,10 +32,11 @@ export function UserMenu({ email }: UserMenuProps) {
   return (
     <div className="flex min-w-0 items-center gap-2 sm:gap-3">
       <span
-        className="hidden max-w-[12rem] truncate text-sm text-muted-foreground sm:inline"
-        title={email}
+        className="hidden max-w-[14rem] truncate text-sm text-muted-foreground sm:inline"
+        title={`${email} (${roleLabel(role)})`}
       >
         {email}
+        <span className="text-muted-foreground/80"> · {roleLabel(role)}</span>
       </span>
       <Button
         type="button"

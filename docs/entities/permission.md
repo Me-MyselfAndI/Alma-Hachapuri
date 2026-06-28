@@ -36,7 +36,7 @@ Assignment-scoped `write_lead`: attorneys may only PATCH leads where `assigned_a
 |------|-------------|
 | `admin` | all keys |
 | `attorney` | `read_leads`, `write_lead`, `send_email`, `read_emails`, `export_leads` |
-| `intake_coordinator` | `read_leads`, `write_lead`, `assign_lead`, `read_prospect`, `send_email`, `read_emails`, `export_leads` |
+| `intake_coordinator` | `read_leads`, `write_lead`, `read_prospect`, `send_email`, `read_emails`, `export_leads` |
 | `readonly` | `read_leads`, `read_prospect`, `read_emails` |
 
 ---

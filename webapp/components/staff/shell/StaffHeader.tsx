@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/SessionProvider";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ThemeControls } from "@/components/theme/ThemeControls";
 import { UserMenu } from "@/components/staff/shell/UserMenu";
+import { canAccessAdmin } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
 export function StaffHeader() {
@@ -14,7 +15,7 @@ export function StaffHeader() {
   const { user } = useSession();
   const leadsActive = pathname.startsWith("/leads");
   const adminActive = pathname.startsWith("/admin");
-  const canManageUsers = user.permissions.includes("manage_users");
+  const showAdminNav = canAccessAdmin(user);
 
   return (
     <header className="site-header">
@@ -38,7 +39,7 @@ export function StaffHeader() {
                 />
               ) : null}
             </Link>
-            {canManageUsers ? (
+            {showAdminNav ? (
               <Link
                 href="/admin/attorneys"
                 className={cn(
@@ -71,7 +72,7 @@ export function StaffHeader() {
           >
             Leads
           </Link>
-          {canManageUsers ? (
+          {showAdminNav ? (
             <Link
               href="/admin/attorneys"
               className={cn(
@@ -83,7 +84,7 @@ export function StaffHeader() {
               Admin
             </Link>
           ) : null}
-          <UserMenu email={user.email} />
+          <UserMenu email={user.email} role={user.role} />
         </div>
       </div>
     </header>

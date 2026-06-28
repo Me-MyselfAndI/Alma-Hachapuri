@@ -169,6 +169,40 @@ class TestLeadAssigneesAndReassignment:
         assert refreshed is not None
         assert refreshed.assigned_account_id == second.id
 
+    def test_attorney_cannot_list_all_accounts(self, role_client) -> None:
+        attorney_client, _ = role_client(
+            Role.ATTORNEY,
+            email="attorney@firm.com",
+        )
+
+        response = attorney_client.get("/api/v1/accounts?page_size=100")
+
+        assert response.status_code == 403
+
+    def test_intake_cannot_reassign_lead(self, role_client, db_session) -> None:
+        _, first = role_client(
+            Role.ATTORNEY,
+            email="first@firm.com",
+            is_default_assignee=True,
+        )
+        _, second = role_client(
+            Role.ATTORNEY,
+            email="second@firm.com",
+            is_default_assignee=False,
+        )
+        intake_client, _ = role_client(
+            Role.INTAKE_COORDINATOR,
+            email="intake@firm.com",
+        )
+        lead = _seed_lead(db_session, assignee_id=first.id)
+
+        response = intake_client.patch(
+            f"/api/v1/leads/{lead.id}",
+            json={"assigned_account_id": str(second.id)},
+        )
+
+        assert response.status_code == 403
+
 
 class TestVerificationRequestRateLimit:
     @patch("src.domains.lead.service.EmailService.send_verification_email")

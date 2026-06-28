@@ -188,7 +188,11 @@ export function LeadDetailPage({ leadId }: LeadDetailPageProps) {
         <FadeIn variant="fade" className="space-y-6">
           <LeadDetailHeader lead={lead} />
           <LeadDetailCards lead={lead} />
-          <LeadAssigneePanel lead={lead} user={user} onLeadUpdated={setLead} />
+          <LeadAssigneePanel
+            key={user.id}
+            lead={lead}
+            onLeadUpdated={setLead}
+          />
           <div className="grid gap-6 lg:grid-cols-2">
             <LeadEmailPanel lead={lead} user={user} />
             <LeadTransitionPanel

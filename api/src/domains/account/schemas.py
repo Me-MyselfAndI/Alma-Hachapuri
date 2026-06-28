@@ -107,6 +107,20 @@ class AccountMe(AccountRead):
     permissions: list[str]
 
 
+class SessionDiagnostics(BaseModel):
+    """Compare DB role, permission matrix, JWT claims, and ``/me`` output."""
+
+    account_id: UUID
+    email: EmailStr
+    db_role: Role
+    permissions_from_db_role: list[str]
+    jwt_role: str | None
+    jwt_permissions: list[str]
+    jwt_matches_db: bool
+    me_permissions: list[str]
+    me_permissions_match_matrix: bool
+
+
 class AccountEmailUpdate(BaseModel):
     """A7 — change own email; requires fresh password proof."""
 

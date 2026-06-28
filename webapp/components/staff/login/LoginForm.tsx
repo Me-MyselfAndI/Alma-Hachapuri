@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { redirectAfterAuthChange } from "@/lib/auth-session";
 
 function safeNextPath(next: string | null): string {
   if (!next || !next.startsWith("/") || next.startsWith("//")) {
@@ -39,7 +40,6 @@ function loginErrorMessage(status: number, body: unknown): string {
 }
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNextPath(searchParams.get("next"));
 
@@ -76,8 +76,8 @@ export function LoginForm() {
         return;
       }
 
-      router.push(next);
-      router.refresh();
+      redirectAfterAuthChange(next);
+      return;
     } catch {
       setError("Network error. Please try again.");
     } finally {

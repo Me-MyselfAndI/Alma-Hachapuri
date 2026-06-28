@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
+import { canAccessAdmin } from "@/lib/access";
 import { formatStaffApiError, staffFetch } from "@/lib/staff-api";
 import { getPermissionMessage } from "@/lib/permission-messages";
 import { cn } from "@/lib/utils";
@@ -116,7 +117,7 @@ function LoadingRows({ columns }: { columns: number }) {
 
 export function StaffAccountsAdminPage({ config }: StaffAccountsAdminPageProps) {
   const { user } = useSession();
-  const canManage = user.permissions.includes("manage_users");
+  const canManage = canAccessAdmin(user);
 
   const [items, setItems] = useState<AccountRead[]>([]);
   const [total, setTotal] = useState(0);

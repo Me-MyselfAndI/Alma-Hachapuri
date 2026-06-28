@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { isNextResponse, requireManageUsersSession } from "@/lib/api-session";
 import { serverFetch } from "@/lib/api";
 
 type RouteContext = {
@@ -7,6 +8,11 @@ type RouteContext = {
 };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
+  const session = await requireManageUsersSession();
+  if (isNextResponse(session)) {
+    return session;
+  }
+
   const { accountId } = await context.params;
   const upstream = await serverFetch(`/api/v1/accounts/${accountId}`);
 
@@ -23,6 +29,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const session = await requireManageUsersSession();
+  if (isNextResponse(session)) {
+    return session;
+  }
+
   const { accountId } = await context.params;
   const body = await request.text();
   const upstream = await serverFetch(`/api/v1/accounts/${accountId}`, {

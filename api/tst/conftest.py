@@ -2,6 +2,11 @@
 
 Precondition tests run WITHOUT permission enforcement — auth deps are overridden
 so tests focus on data/state rules only (see F2.6).
+
+Service-layer tests that need a live SQLAlchemy session use the ``db_session``
+fixture (SQLite in-memory). Postgres-specific column types (``UUID``, ``JSONB``)
+are compiled to portable equivalents so the same ORM models load cleanly on
+SQLite without forking the model layer.
 """
 
 from __future__ import annotations
@@ -14,8 +19,47 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.main import app
+import src.domains  # noqa: F401  -- side-effect: register every ORM model on Base
+from src.core.database import Base
+from src.main import app
+
+# Disable the startup seed during tests — the lifespan opens a real DB session
+# against ``SessionLocal`` (production engine), which would try to connect to
+# Postgres. Tests that need seeded accounts call ``SeedService`` against the
+# in-memory SQLite session directly.
+import os
+os.environ.setdefault("DISABLE_STARTUP_SEED", "true")
+from src.core import config as _config
+_config.settings.disable_startup_seed = True
+
+
+@compiles(PgUUID, "sqlite")
+def _compile_pg_uuid_sqlite(  # type: ignore[no-untyped-def]
+    element, compiler, **kw
+):
+    """Render ``postgresql.UUID`` as CHAR(36) under the SQLite test dialect.
+
+    SQLAlchemy's PG ``UUID`` type already converts to/from ``uuid.UUID`` at the
+    binding layer, so we only need a portable storage type to satisfy DDL.
+    """
+
+    return "CHAR(36)"
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(  # type: ignore[no-untyped-def]
+    element, compiler, **kw
+):
+    """Render ``postgresql.JSONB`` as JSON text under SQLite (read/write as str)."""
+
+    return "JSON"
 
 
 def _mock_staff_account(**overrides: Any) -> MagicMock:
@@ -46,22 +90,29 @@ def staff_account() -> MagicMock:
 
 
 @pytest.fixture
-def client(staff_account: MagicMock) -> Generator[TestClient, None, None]:
-    """Test client with permission checks bypassed."""
+def client(
+    staff_account: MagicMock, db_session: Session
+) -> Generator[TestClient, None, None]:
+    """Test client backed by SQLite + permission checks bypassed.
+
+    The conftest overrides ``get_current_account`` to return an admin mock and
+    swaps ``get_db`` for the per-test SQLite session so HTTP routes run end
+    to end without Postgres. ``require_permission`` is a factory whose inner
+    closure depends on ``get_current_account`` — overriding that one dep is
+    enough; manage_users etc. all derive from ``account.role`` on the mock.
+    """
 
     def override_current_account() -> MagicMock:
         return staff_account
 
-    def override_require_permission(_key: str):
-        def _dep() -> MagicMock:
-            return staff_account
+    def override_get_db() -> Generator[Session, None, None]:
+        yield db_session
 
-        return _dep
-
-    from app.core import deps
+    from src.core import database, deps
 
     app.dependency_overrides[deps.get_current_account] = override_current_account
-    # require_permission is a factory — override after routes wire it in PKG-6
+    app.dependency_overrides[database.get_db] = override_get_db
+    app.dependency_overrides[deps.get_db] = override_get_db
 
     with TestClient(app) as test_client:
         yield test_client
@@ -72,3 +123,38 @@ def client(staff_account: MagicMock) -> Generator[TestClient, None, None]:
 @pytest.fixture
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@pytest.fixture
+def sqlite_engine() -> Generator[Engine, None, None]:
+    """Fresh in-memory SQLite engine with the full schema loaded.
+
+    One engine per test gives strong isolation without the cost of Postgres.
+    The PG ``UUID`` / ``JSONB`` compile hooks above are what make this work
+    against the production ORM models unchanged.
+    """
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    try:
+        yield engine
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+@pytest.fixture
+def db_session(sqlite_engine: Engine) -> Generator[Session, None, None]:
+    """SQLAlchemy session bound to the per-test SQLite engine."""
+
+    factory = sessionmaker(bind=sqlite_engine, autoflush=False, autocommit=False, future=True)
+    session = factory()
+    try:
+        yield session
+    finally:
+        session.close()

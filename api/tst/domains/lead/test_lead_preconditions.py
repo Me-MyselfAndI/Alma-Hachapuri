@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.domains.lead.preconditions import (
+from src.domains.lead.preconditions import (
     LeadState,
     VerificationTokenError,
     VALID_TRANSITIONS,

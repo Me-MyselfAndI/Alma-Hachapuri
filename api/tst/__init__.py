@@ -1,1 +1,1 @@
-"""Domain-scoped tests — mirror app/domains/."""
+"""Domain-scoped tests — mirror src/domains/."""

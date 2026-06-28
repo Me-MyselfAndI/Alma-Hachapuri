@@ -24,7 +24,6 @@ def _create_account(client: TestClient, payload: dict):
     return client.post(ACCOUNTS_PATH, json=payload)
 
 
-@pytest.mark.skip(reason="route not implemented")
 class TestLoginValidation:
     """Login (A1) — credential and account-state preconditions."""
 
@@ -64,7 +63,6 @@ class TestLoginValidation:
         assert response.status_code == 422
 
 
-@pytest.mark.skip(reason="route not implemented")
 class TestCreateAccountDuplicateEmail:
     """CreateAccount (A3) — email uniqueness (case-insensitive after D7 normalization)."""
 
@@ -111,7 +109,6 @@ class TestCreateAccountDuplicateEmail:
         assert response.status_code == 409
 
 
-@pytest.mark.skip(reason="route not implemented")
 class TestDefaultAssigneeOnNonAttorney:
     """CreateAccount / UpdateAccount — is_default_assignee only valid for attorneys (D6)."""
 
@@ -175,34 +172,71 @@ class TestDefaultAssigneeOnNonAttorney:
         assert response.status_code == 422
 
 
-@pytest.mark.skip(reason="route not implemented")
 class TestResolveDefaultAssigneeActiveCheck:
-    """ResolveDefaultAssignee (S3) — active attorney with is_default_assignee=true (D5)."""
+    """ResolveDefaultAssignee (S3) — active attorney with is_default_assignee=true (D4/D5)."""
 
     def test_resolve_default_assignee_returns_active_attorney(
-        self, client: TestClient
+        self, db_session
     ) -> None:
-        """Exactly one active attorney with is_default_assignee=true is returned."""
-        # When implemented:
-        # 1. Seed attorney: role=attorney, is_default_assignee=True, is_active=True
-        # 2. assignee = AccountService.resolve_default_assignee(db)
-        # 3. assert assignee.role == "attorney"
-        # 4. assert assignee.is_default_assignee is True and assignee.is_active is True
-        raise NotImplementedError("AccountService.resolve_default_assignee")
+        from src.core.permissions import Role
+        from src.domains.account.schemas import AccountCreate
+        from src.domains.account.service import AccountService
+
+        AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="default@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Default",
+                last_name="Attorney",
+                is_default_assignee=True,
+            ),
+        )
+
+        assignee = AccountService.resolve_default_assignee(db_session)
+
+        assert assignee.role == Role.ATTORNEY.value
+        assert assignee.is_default_assignee is True
+        assert assignee.is_active is True
 
     def test_resolve_default_assignee_rejects_inactive_default(
-        self, client: TestClient
+        self, db_session
     ) -> None:
-        """Default assignee with is_active=false must not be returned (D5)."""
-        # When implemented:
-        # 1. Create attorney with is_default_assignee=True, then PATCH is_active=False
-        # 2. AccountService.resolve_default_assignee(db) must raise (no fallback to inactive)
-        raise NotImplementedError("AccountService.resolve_default_assignee")
+        from fastapi import HTTPException
+        from src.core.permissions import Role
+        from src.domains.account.models import Account
+        from src.domains.account.schemas import AccountCreate
+        from src.domains.account.service import AccountService
+
+        attorney = AccountService.create_account(
+            db_session,
+            AccountCreate(
+                email="inactive-default@firm.com",
+                password="attorney-pass",
+                role=Role.ATTORNEY,
+                first_name="Inactive",
+                last_name="Attorney",
+                is_default_assignee=True,
+            ),
+        )
+        row = db_session.get(Account, attorney.id)
+        assert row is not None
+        row.is_active = False
+        db_session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            AccountService.resolve_default_assignee(db_session)
+
+        assert exc_info.value.status_code == 500
 
     def test_resolve_default_assignee_fails_when_none_configured(
-        self, client: TestClient
+        self, db_session
     ) -> None:
-        """No qualifying default assignee must raise (HTTP mapping TBD per D4)."""
-        # When implemented: empty DB (no attorney default) → service raises;
-        # caller maps to 503, null assignee, or health-check failure per D4 decision.
-        raise NotImplementedError("AccountService.resolve_default_assignee")
+        from fastapi import HTTPException
+        from src.domains.account.service import AccountService
+
+        with pytest.raises(HTTPException) as exc_info:
+            AccountService.resolve_default_assignee(db_session)
+
+        assert exc_info.value.status_code == 500

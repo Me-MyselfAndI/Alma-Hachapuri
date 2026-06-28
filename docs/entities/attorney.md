@@ -1,64 +1,39 @@
-# Attorney
+# Attorney (merged into Account)
 
-Staff profile for someone who handles leads — linked to an internal account.
+> **Status: merged — 2026-06-27.** There is no `attorneys` table. An “attorney” is an **account** with `role=attorney`.
 
----
-
-## Purpose
-
-- Represent attorneys as assignable lead owners
-- Notification target for new-lead emails (F3.1)
-- Optional fields beyond login (display name, bar ID, etc.)
+All schema, API actions, and assignment logic live in **[account.md](account.md)**.
 
 ---
 
-## Table: `attorneys`
+## Assigned API routes (agent checklist)
 
-| Column | Type | Required | Notes |
-|--------|------|----------|-------|
-| `id` | UUID | PK | |
-| `account_id` | UUID | FK → `accounts.id` | **Unique** — one profile per account |
-| `first_name` | VARCHAR(100) | yes | Display |
-| `last_name` | VARCHAR(100) | yes | Display |
-| `work_email` | VARCHAR(255) | yes | Notification recipient; may differ from login email |
-| `is_default_assignee` | BOOLEAN | yes | Default false; one true for auto-assign (F6.1) |
-| `created_at` | TIMESTAMPTZ | yes | |
-| `updated_at` | TIMESTAMPTZ | yes | |
+**No separate agent.** Use [account.md](account.md) assigned routes. Former attorney routes map as:
+
+| Old ID | Replacement |
+|--------|-------------|
+| T1 `GET /attorneys` | A4 `GET /accounts?role=attorney` |
+| T2 `GET /attorneys/{id}` | A5 `GET /accounts/{id}` |
+| T3 `POST /attorneys` | A3 `POST /accounts` with `"role": "attorney"` |
+| T4 `PATCH /attorneys/{id}` | A6 `PATCH /accounts/{id}` |
 
 ---
 
-## Relationships
+## Domain language
 
-| Relation | Target | Cardinality |
-|----------|--------|-------------|
-| `account` | Account | 1 attorney → 1 account |
-| `assigned_leads` | Lead | 1 attorney → N leads |
+The brief still says “an attorney inside the company” — that maps to:
 
----
-
-## Business rules
-
-| Rule | Detail |
-|------|--------|
-| Auto-assign (F6.1) | On lead create, set `assigned_attorney_id` to attorney where `is_default_assignee=true`; fallback TBD |
-| Override | Internal PATCH can reassign |
-| Create | Admin creates account + attorney profile together (or link existing account) |
+| Concept | Implementation |
+|---------|----------------|
+| Attorney logs in | `accounts` row, any role |
+| Attorney handles leads | `role=attorney` (or `intake_coordinator`) |
+| Assigned on lead | `leads.assigned_account_id` → `accounts.id` |
+| New-lead notification | `work_email` or `email` on assigned account |
+| Default assignee | `is_default_assignee=true` on one `role=attorney` account |
 
 ---
 
-## API touchpoints
+## Related
 
-| Endpoint | Auth | Action |
-|----------|------|--------|
-| `GET /attorneys` | Internal | List for assignment dropdown |
-| `POST /attorneys` | Admin | Create profile |
-| `PATCH /attorneys/{id}` | Admin | Update incl. default assignee flag |
-
----
-
-## Implementation checklist
-
-- [ ] SQLAlchemy model
-- [ ] Constraint: at most one `is_default_assignee=true` (app or DB)
-- [ ] Assignment resolver on lead create
-- [ ] Include in lead list/detail responses
+- [account.md](account.md) — canonical
+- [lead.md](lead.md) — `assigned_account_id`

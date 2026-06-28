@@ -1,84 +1,85 @@
-# Role
+# Role (code enum — not a DB table)
 
-Named access profile assigned to accounts. Permissions attach to roles, not individual accounts (F6.2).
+> **Status: simplified — 2026-06-27.** Roles are a **PostgreSQL enum / VARCHAR** on `accounts.role`, not a `roles` table.
 
 ---
 
 ## Purpose
 
-- Model `admin`, `attorney`, `intake_coordinator`, `readonly` as data — not a string enum on `accounts`
-- Central place to define what each role can do (via [Permission](permission.md) join)
-- JWT can include `role` name from joined role row
+- Model `admin`, `attorney`, `intake_coordinator`, `readonly` as an **immutable** field on account create
+- Permissions computed from `ROLE_PERMISSIONS` in code — see [permission.md](permission.md)
+- JWT includes `role` + `permissions[]` at login
+
+This is simplified IAM:
+
+```text
+Account  ≈ IAM User
+role     ≈ IAM Role (fixed set, stored on user)
+permissions ≈ policy actions (code constant → set per role)
+```
+
+No `roles`, `permissions`, or `role_permissions` tables.
 
 ---
 
-## Table: `roles`
+## Enum values
 
-| Column | Type | Required | Notes |
-|--------|------|----------|-------|
-| `id` | UUID | PK | |
-| `name` | VARCHAR(50) | yes | **Unique** slug, e.g. `admin`, `attorney` |
-| `description` | VARCHAR(255) | no | Human-readable |
-| `created_at` | TIMESTAMPTZ | yes | |
-| `updated_at` | TIMESTAMPTZ | yes | |
-
----
-
-## Join table: `role_permissions`
-
-| Column | Type | Required | Notes |
-|--------|------|----------|-------|
-| `role_id` | UUID | FK → `roles.id` | |
-| `permission_id` | UUID | FK → `permissions.id` | |
-| | | PK `(role_id, permission_id)` | |
-
-Exact mappings → F6.2 (deferred). Seed with empty or default sets per role.
-
----
-
-## Relationships
-
-| Relation | Target | Cardinality |
-|----------|--------|-------------|
-| `accounts` | Account | 1 role → N accounts |
-| `permissions` | Permission | N roles ↔ N permissions (via `role_permissions`) |
-
----
-
-## Seed roles (proposed)
-
-| `name` | Typical use |
+| `role` | Description |
 |--------|-------------|
-| `admin` | Full access, manage users |
+| `admin` | Full access; manage users |
 | `attorney` | Handle assigned leads |
-| `intake_coordinator` | Intake / outreach support |
-| `readonly` | View-only |
+| `intake_coordinator` | Intake / outreach + assign |
+| `readonly` | View only |
+
+**Immutable:** set at `POST /accounts`; cannot PATCH. To change role, create a new account and deactivate the old one.
 
 ---
 
-## Business rules
+## Code location (implementation)
 
-| Rule | Detail |
-|------|--------|
-| One role per account | `accounts.role_id` FK (v1) |
-| Auth check | Load account → role → permissions; or embed permission keys in JWT at login |
-| Immutable slug | `name` stable for code checks; use `id` in FKs |
-| Admin manages roles | Optional v1: seed-only; no CRUD UI required for assessment |
+```python
+# api/src/core/permissions.py
+
+class Role(str, Enum):
+    ADMIN = "admin"
+    ATTORNEY = "attorney"
+    INTAKE_COORDINATOR = "intake_coordinator"
+    READONLY = "readonly"
+
+ROLE_PERMISSIONS: dict[Role, set[str]] = {
+    Role.ADMIN: { ... all keys ... },
+    Role.ATTORNEY: {"read_leads", "write_lead", "read_emails", "export_leads"},
+    ...
+}
+```
+
+Embedded in **A2** `GET /auth/me` as `"role": "attorney"` string.
 
 ---
 
-## API touchpoints
+## Actions
 
-| Endpoint | Auth | Action |
-|----------|------|--------|
-| `GET /roles` | Admin | List roles (optional v1) |
-| Embedded in `GET /auth/me` | Bearer | Return role name + permission keys |
+> **Agent rule:** No HTTP routes. Co-implement with [permission.md](permission.md) in same file/module.
+
+### Assigned API routes (agent checklist)
+
+**Implement in:** `api/src/core/permissions.py` (shared with permission agent)
+
+| ID | Type | Deliverable |
+|----|------|-------------|
+| — | Code | `Role` enum (`admin`, `attorney`, `intake_coordinator`, `readonly`) |
+| — | Code | `accounts.role` column validation on create |
+| — | JWT | `role` claim on A1 |
+
+**No `/roles` HTTP endpoints.**
 
 ---
 
-## Implementation checklist
+The earlier `roles` + `role_permissions` table design was **superseded** — see `AGENT_CORRECTIONS.md` #16.
 
-- [ ] SQLAlchemy models: `Role`, `RolePermission`
-- [ ] Seed migration with 4 default roles
-- [ ] `has_permission(account, "read_leads")` helper
-- [ ] JWT claims: `role`, `permissions[]` (optional)
+---
+
+## Related
+
+- [account.md](account.md) — `accounts.role` column
+- [permission.md](permission.md) — permission keys + matrix

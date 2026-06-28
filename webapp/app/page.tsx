@@ -1,11 +1,22 @@
-export default function Home() {
+import Link from "next/link";
+
+import { PublicShell } from "@/components/public/PublicShell";
+import { Button } from "@/components/ui/button";
+
+export default function HomePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-4 p-8">
-      <h1 className="text-3xl font-semibold">Alma Lead Intake</h1>
-      <p className="text-zinc-600">
-        Public lead form and internal dashboard will live here. API:{" "}
-        {process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}
-      </p>
-    </main>
+    <PublicShell
+      title="Welcome"
+      description="Submit your information for review, or sign in if you are staff."
+    >
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Link href="/submit">
+          <Button>Submit a lead</Button>
+        </Link>
+        <Link href="/login">
+          <Button variant="outline">Staff login</Button>
+        </Link>
+      </div>
+    </PublicShell>
   );
 }

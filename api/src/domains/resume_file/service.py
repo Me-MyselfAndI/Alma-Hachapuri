@@ -138,12 +138,13 @@ def is_past_retention(
     *,
     archived_at: datetime | None,
     now: datetime,
-    retention_days: int,
+    retention_days: int | None = None,
 ) -> bool:
     """Return True when the resume file should be purged per F2.5 retention policy."""
-    if archived_at is None or retention_days <= 0:
+    days = retention_days if retention_days is not None else settings.resume_retention_days
+    if archived_at is None or days <= 0:
         return False
-    return (now - archived_at) >= timedelta(days=retention_days)
+    return (now - archived_at) >= timedelta(days=days)
 
 
 # ---------------------------------------------------------------------------

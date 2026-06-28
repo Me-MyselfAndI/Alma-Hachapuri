@@ -27,6 +27,8 @@ from src.domains.email.preconditions import (
     pick_conversation_id,
 )
 from src.domains.lead.models import Lead, LeadIntakePending
+from src.domains.lead.preconditions import VerificationTokenError, check_verification_token
+from src.domains.lead.tokens import reissue_verification_token, ensure_utc
 
 
 logger = logging.getLogger(__name__)
@@ -542,9 +544,21 @@ class EmailService:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="Cannot retry verification email without pending intake",
                 )
+            now = datetime.now(timezone.utc)
+            token_err = check_verification_token(
+                expires_at=ensure_utc(pending.expires_at),
+                used_at=ensure_utc(pending.used_at) if pending.used_at else None,
+                now=now,
+            )
+            if token_err is VerificationTokenError.ALREADY_USED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Verification token already used; cannot retry",
+                )
+            raw_token = reissue_verification_token(db, pending)
             context = {
                 "first_name": pending.first_name,
-                "verify_url": f"{settings.webapp_url}/verify?token=RETRY_NOT_AVAILABLE",
+                "verify_url": f"{settings.webapp_url}/verify?token={raw_token}",
                 "expires_at": pending.expires_at.isoformat(),
             }
         else:

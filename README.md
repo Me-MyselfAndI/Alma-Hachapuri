@@ -16,13 +16,31 @@ No accounts required for local dev (no GitHub, Resend, or OpenAI until you choos
 
 ## Quick start
 
-### 1. Environment
+### One command (after setup)
+
+From the **repo root** (clone anywhere — no fixed drive path):
+
+```powershell
+python scripts/setup.py   # once: venv, pip, npm, .env
+python scripts/start.py    # Docker + migrations + API + webapp
+```
+
+Or: `npm run setup` then `npm start`
+
+Stop with **Ctrl+C**.
+
+### Manual steps (optional)
+
+<details>
+<summary>Run each component separately</summary>
+
+#### 1. Environment
 
 ```powershell
 copy .env.example .env
 ```
 
-### 2. Database + Mailpit (Docker)
+#### 2. Database + Mailpit (Docker)
 
 ```powershell
 docker compose up -d
@@ -30,7 +48,7 @@ docker compose up -d
 
 Mailpit UI: http://localhost:8025
 
-### 3. API service (FastAPI)
+#### 3. API service (FastAPI)
 
 ```powershell
 cd api
@@ -43,7 +61,7 @@ uvicorn src.main:app --reload --port 8000
 API docs: http://localhost:8000/docs  
 Health: http://localhost:8000/health
 
-### 4. Web application (Next.js)
+#### 4. Web application (Next.js)
 
 New terminal:
 
@@ -54,6 +72,8 @@ npm run dev
 ```
 
 App: http://localhost:3000
+
+</details>
 
 ## Project layout
 
@@ -67,5 +87,7 @@ docker-compose.yml   Postgres + Mailpit for local dev
 ```
 
 ## Documentation
+
+**Local setup:** [docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md)
 
 See `docs/` — especially `ARCHITECTURE.md`, `entities/`, and `FEATURES.md`.

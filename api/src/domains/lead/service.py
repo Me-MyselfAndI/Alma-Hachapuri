@@ -1,4 +1,6 @@
-"""LeadService (S4, S5), EnrichmentService (S8).
+"""LeadService (S4, S5).
+
+Enrichment (S8) lives in ``enrichment.py`` and is queued from the L1b router.
 
 Spec: docs/entities/lead.md, docs/entities/API_CATALOG.md.
 """
@@ -6,7 +8,6 @@ Spec: docs/entities/lead.md, docs/entities/API_CATALOG.md.
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import logging
 import secrets
@@ -35,6 +36,7 @@ from src.domains.lead.schemas import (
     LeadUpdate,
     LeadVerificationRequestResponse,
 )
+from src.domains.lead.tokens import hash_verification_token, ensure_utc
 from src.domains.prospect.service import ProspectService
 from src.domains.resume_file.service import (
     EXTENSION_BY_MIME,
@@ -49,10 +51,6 @@ logger = logging.getLogger(__name__)
 _MIME_BY_EXTENSION = {ext: mime for mime, ext in EXTENSION_BY_MIME.items()}
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -60,9 +58,7 @@ def _now_utc() -> datetime:
 def _as_utc(dt: datetime) -> datetime:
     """Normalize SQLite-returned naive timestamps to UTC-aware."""
 
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
+    return ensure_utc(dt)
 
 
 def _temp_resume_metadata(storage_key: str) -> tuple[str, str, int]:
@@ -72,7 +68,10 @@ def _temp_resume_metadata(storage_key: str) -> tuple[str, str, int]:
 
     path = _resolve_path(storage_key)
     if not path.exists():
-        raise FileNotFoundError(f"Temp resume missing: {storage_key}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pending intake data invalid: temp resume file missing",
+        )
 
     ext = path.suffix.lower()
     mime_type = _MIME_BY_EXTENSION.get(ext, "application/octet-stream")
@@ -90,16 +89,6 @@ def _invalidate_prior_pending(db: Session, *, email: str) -> None:
         delete_orphan(row.temp_resume_storage_key)
         row.used_at = _now_utc()
     db.flush()
-
-
-class EnrichmentService:
-    """F7.1 optional async enrichment (S8 stub)."""
-
-    @staticmethod
-    def enqueue_lead_enrichment(lead_id: UUID) -> None:
-        if not settings.enable_llm_enrichment:
-            return
-        logger.info("LLM enrichment queued for lead %s (stub)", lead_id)
 
 
 class LeadService:
@@ -125,7 +114,7 @@ class LeadService:
             _invalidate_prior_pending(db, email=normalized)
 
             raw_token = secrets.token_urlsafe(32)
-            token_hash = _hash_token(raw_token)
+            token_hash = hash_verification_token(raw_token)
             expires_at = _now_utc() + timedelta(hours=settings.verification_token_ttl_hours)
 
             pending = LeadIntakePending(
@@ -178,7 +167,7 @@ class LeadService:
                 detail="token is required",
             )
 
-        token_hash = _hash_token(token.strip())
+        token_hash = hash_verification_token(token.strip())
         pending = db.scalar(
             select(LeadIntakePending).where(LeadIntakePending.token_hash == token_hash)
         )
@@ -243,11 +232,10 @@ class LeadService:
 
         try:
             EmailService.send_lead_created_notifications(db, lead=lead)
+            db.commit()
         except Exception:
             logger.exception("S7 notifications failed for lead %s", lead.id)
-
-        if settings.enable_llm_enrichment:
-            EnrichmentService.enqueue_lead_enrichment(lead.id)
+            db.rollback()
 
         return lead
 

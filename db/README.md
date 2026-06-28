@@ -29,16 +29,13 @@ application's settings and ORM metadata from `../api/src/` (env.py prepends
 on `Base.metadata` before autogenerate runs).
 
 ```powershell
-# From repo root, with the api venv active or invoked directly:
-cd db
-..\api\.venv\Scripts\python.exe -m alembic upgrade head
-```
+# From repo root (preferred — paths are repo-relative):
+python scripts/start.py --skip-webapp
 
-Or via the `alembic` console script if the venv is on PATH:
-
-```powershell
+# Or run Alembic directly from db/:
 cd db
-alembic upgrade head
+../api/.venv/Scripts/python.exe -m alembic upgrade head   # Windows
+# ../api/.venv/bin/python -m alembic upgrade head         # macOS/Linux
 ```
 
 The initial schema (all 7 tables: `accounts`, `prospects`, `leads`,

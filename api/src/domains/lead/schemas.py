@@ -70,12 +70,14 @@ class LeadRead(BaseModel):
     last_name: str
     email: EmailStr
     state: LeadState
+    state_changed_at: datetime
     source: str | None
     custom_fields: dict | None
     assigned_account_id: UUID | None
     assigned_account: AssignedAccountSummary | None = None
     resume: LeadResumeSummary | None = None
     prospect: ProspectSummary | None = None
+    archived_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -90,9 +92,11 @@ class LeadListItem(BaseModel):
     last_name: str
     email: EmailStr
     state: LeadState
+    state_changed_at: datetime
     source: str | None
     assigned_account_id: UUID | None
     assigned_account_name: str | None = None
+    archived_at: datetime | None = None
     created_at: datetime
 
 

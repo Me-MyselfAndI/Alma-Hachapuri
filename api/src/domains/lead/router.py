@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -21,9 +22,11 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.core.deps import get_db, require_permission
 from src.domains.account.models import Account
 from src.domains.account.schemas import Paginated
+from src.domains.lead.enrichment import schedule_lead_enrichment
 from src.domains.lead.models import Lead
 from src.domains.lead.preconditions import LeadState
 from src.domains.lead.schemas import (
@@ -84,12 +87,14 @@ def _build_lead_read(db: Session, lead: Lead) -> LeadRead:
         last_name=lead.last_name,
         email=lead.email,
         state=LeadState(lead.state),
+        state_changed_at=lead.state_changed_at,
         source=lead.source,
         custom_fields=lead.custom_fields,
         assigned_account_id=lead.assigned_account_id,
         assigned_account=assignee_summary,
         resume=resume_summary,
         prospect=prospect_summary,
+        archived_at=lead.archived_at,
         created_at=lead.created_at,
         updated_at=lead.updated_at,
     )
@@ -108,9 +113,11 @@ def _build_list_item(db: Session, lead: Lead) -> LeadListItem:
         last_name=lead.last_name,
         email=lead.email,
         state=LeadState(lead.state),
+        state_changed_at=lead.state_changed_at,
         source=lead.source,
         assigned_account_id=lead.assigned_account_id,
         assigned_account_name=assignee_name,
+        archived_at=lead.archived_at,
         created_at=lead.created_at,
     )
 
@@ -151,6 +158,7 @@ def request_lead_verification(
     summary="VerifyEmailAndCreateLead (L1b — email link)",
 )
 def verify_lead_get(
+    background_tasks: BackgroundTasks,
     token: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> LeadCreateResponse:
@@ -160,6 +168,8 @@ def verify_lead_get(
             detail="token is required",
         )
     lead = LeadService.verify_and_create_lead(db, token=token)
+    if settings.enable_llm_enrichment:
+        background_tasks.add_task(schedule_lead_enrichment, lead.id)
     return LeadCreateResponse(id=lead.id, state=LeadState(lead.state))
 
 
@@ -171,9 +181,12 @@ def verify_lead_get(
 )
 def verify_lead_post(
     body: LeadVerifyRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> LeadCreateResponse:
     lead = LeadService.verify_and_create_lead(db, token=body.token)
+    if settings.enable_llm_enrichment:
+        background_tasks.add_task(schedule_lead_enrichment, lead.id)
     return LeadCreateResponse(id=lead.id, state=LeadState(lead.state))
 
 

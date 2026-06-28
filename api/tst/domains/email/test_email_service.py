@@ -18,6 +18,7 @@ from src.domains.email.models import EmailNotification
 from src.domains.email.preconditions import EmailStatus
 from src.domains.email.service import EmailDeliveryError, EmailService
 from src.domains.lead.models import Lead, LeadIntakePending
+from src.domains.lead.tokens import ensure_utc
 from src.domains.prospect.models import Prospect
 from src.domains.resume_file.models import ResumeFile
 
@@ -303,6 +304,44 @@ class TestRetryFailed:
         with pytest.raises(HTTPException) as exc:
             EmailService.retry_failed(db_session, row.id)
         assert exc.value.status_code == 409
+
+    @patch("src.domains.email.service.EmailService._send_smtp")
+    def test_retry_verification_reissues_token(
+        self, mock_smtp: MagicMock, db_session: Session
+    ) -> None:
+        pending = LeadIntakePending(
+            email="jane@example.com",
+            first_name="Jane",
+            last_name="Doe",
+            temp_resume_storage_key="temp/x.pdf",
+            token_hash="old-hash",
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+        db_session.add(pending)
+        db_session.flush()
+        row = EmailNotification(
+            pending_intake_id=pending.id,
+            conversation_id=uuid.uuid4(),
+            recipient=pending.email,
+            template="email_verification",
+            subject="Verify",
+            status=EmailStatus.FAILED.value,
+            error_message="smtp down",
+        )
+        db_session.add(row)
+        db_session.flush()
+        old_hash = pending.token_hash
+
+        updated = EmailService.retry_failed(db_session, row.id)
+        db_session.commit()
+        db_session.refresh(pending)
+
+        assert updated.status == EmailStatus.SENT.value
+        assert pending.token_hash != old_hash
+        assert ensure_utc(pending.expires_at) > datetime.now(UTC) - timedelta(minutes=5)
+        html = mock_smtp.call_args.kwargs["html_body"]
+        assert "RETRY_NOT_AVAILABLE" not in html
+        assert "/verify?token=" in html
 
 
 class TestSendTemplate:

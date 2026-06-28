@@ -14,7 +14,9 @@ api/
     └── domains/
 ```
 
-Migrations: `../db/alembic/` · File uploads: `../storage/uploads/` · Postgres: via Docker (root `docker-compose.yml`).
+Migrations: `db/alembic/` · File uploads: `storage/uploads/` · Postgres: via Docker (root `docker-compose.yml`).
+
+Configuration and uploads paths are resolved from the **repo root** (`api/src/core/paths.py`). The root `.env` file is loaded automatically — you do not need to copy it into `api/` unless you want overrides.
 
 ## Build order
 
@@ -41,11 +43,16 @@ Requires Postgres (`docker compose up -d` from repo root) and `.env` from `.env.
 
 ## Database migrations
 
-Schema is owned by Alembic in `../db/alembic/`. Apply the schema before running the API:
+Schema is owned by Alembic in `db/alembic/`. Applied automatically by `python scripts/start.py`, or manually:
 
 ```powershell
-cd ../db
-..\api\.venv\Scripts\python.exe -m alembic upgrade head
+# From repo root
+python scripts/start.py --skip-webapp --skip-docker   # migrate + API only, if Docker already up
+
+# Or run Alembic directly:
+cd db
+../api/.venv/Scripts/python.exe -m alembic upgrade head   # Windows
+# ../api/.venv/bin/python -m alembic upgrade head         # macOS/Linux
 ```
 
-See [`../db/README.md`](../db/README.md) for migration authoring details.
+See [`db/README.md`](../db/README.md) for migration authoring details.

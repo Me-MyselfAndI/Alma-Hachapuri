@@ -338,3 +338,32 @@ class TestTokenErrors:
             LeadService.verify_and_create_lead(db_session, token="unknown-token")
 
         assert exc_info.value.status_code == 404
+
+    @patch("src.domains.lead.service.EmailService.send_verification_email")
+    def test_missing_temp_resume_returns_422(
+        self, mock_send, db_session, uploads_dir
+    ) -> None:
+        mock_send.return_value = None
+        _seed_default_attorney(db_session)
+
+        LeadService.request_verification(
+            db_session,
+            first_name="Jane",
+            last_name="Doe",
+            email="jane@example.com",
+            resume=_make_upload(),
+        )
+        pending = db_session.scalar(select(LeadIntakePending))
+        assert pending is not None
+        raw_token = mock_send.call_args.kwargs["token"]
+
+        from src.domains.resume_file.service import _resolve_path
+
+        path = _resolve_path(pending.temp_resume_storage_key)
+        path.unlink()
+
+        with pytest.raises(HTTPException) as exc_info:
+            LeadService.verify_and_create_lead(db_session, token=raw_token)
+
+        assert exc_info.value.status_code == 422
+        assert "invalid" in exc_info.value.detail.lower()

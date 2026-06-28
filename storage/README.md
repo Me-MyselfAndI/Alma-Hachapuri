@@ -1,28 +1,26 @@
-# File storage — resume uploads
+# Resume file storage
 
-Binary storage for uploaded resume files (PDF, DOC, DOCX). Local disk in development; swappable to S3 in production.
+Local disk storage for uploaded resume files (PDF/DOC/DOCX). The API is the only writer.
 
 ## Layout
 
 ```text
 storage/
-├── uploads/           # Runtime files (.gitignored except .gitkeep)
-│   └── .gitkeep
-└── README.md
+└── uploads/          # Resume binaries (gitignored except .gitkeep)
+    └── temp/         # Pending intake files (Flow A1) until verified
 ```
 
 ## Configuration
 
-Set in root `.env`:
+In the **repo root** `.env`:
 
 ```text
-UPLOADS_DIR=../storage/uploads
+UPLOADS_DIR=storage/uploads
 ```
 
-(Path is relative to the `api/` working directory when running uvicorn.)
-
-Metadata (filename, mime type, storage key) lives in Postgres — see `resume_files` table in entity docs.
+Paths are resolved from the monorepo root (see `api/src/core/paths.py`), not from the
+current working directory. Override with an absolute path if needed.
 
 ## Who uses this
 
-Only the **API service** (`../api/`) reads and writes files here. The webapp uploads via multipart to the API.
+Only the **API service** (`api/`) reads and writes files here. The webapp uploads via multipart to the API.

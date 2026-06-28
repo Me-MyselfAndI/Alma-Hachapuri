@@ -20,7 +20,6 @@ from src.core.permissions import (
     permissions_for_role,
 )
 
-
 EXPECTED_MATRIX: dict[Role, frozenset[str]] = {
     Role.ADMIN: frozenset(
         {

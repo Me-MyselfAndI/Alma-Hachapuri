@@ -1,0 +1,9 @@
+{
+  "name": "alma-lead-intake",
+  "private": true,
+  "description": "Monorepo root scripts — run from repo root",
+  "scripts": {
+    "setup": "python scripts/setup.py",
+    "start": "python scripts/start.py"
+  }
+}

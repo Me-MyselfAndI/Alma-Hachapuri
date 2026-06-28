@@ -3,9 +3,12 @@
 Spec: docs/entities/account.md (AuthService)
 
 Hashing uses passlib's bcrypt scheme; tokens are HS256-signed JWTs whose
-payload is the minimum needed by `get_current_account` and the frontend:
+payload is the minimum needed by the frontend and `get_current_account`:
 `sub` (account id as string), `role`, `permissions` (sorted for determinism),
 and `exp`.
+
+Note: `permissions` in the token are informational for clients. Route guards
+call `account_has_permission(account, key)` against the live DB row's role.
 """
 
 from __future__ import annotations

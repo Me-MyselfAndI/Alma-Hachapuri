@@ -96,3 +96,46 @@ class TestListProspectLeads:
             )
             is False
         )
+
+
+class TestProspectRouteFailures:
+    """P1/P2 HTTP — docs/entities/prospect.md Preconditions."""
+
+    def test_get_prospect_404_when_missing(self, role_client) -> None:
+        import uuid
+
+        from src.core.permissions import Role
+
+        client, _ = role_client(Role.INTAKE_COORDINATOR, email="intake-prospect@firm.com")
+        response = client.get(f"/api/v1/prospects/{uuid.uuid4()}")
+        assert response.status_code == 404
+
+    def test_list_prospect_leads_404_when_missing(self, role_client) -> None:
+        import uuid
+
+        from src.core.permissions import Role
+
+        client, _ = role_client(Role.INTAKE_COORDINATOR, email="intake-p2@firm.com")
+        response = client.get(f"/api/v1/prospects/{uuid.uuid4()}/leads")
+        assert response.status_code == 404
+
+    def test_get_prospect_200_with_lead_count(self, role_client, db_session) -> None:
+        from src.core.permissions import Role
+        from tst.shared.doc_fixtures import seed_lead
+
+        client, _ = role_client(Role.ADMIN, email="admin-prospect@firm.com")
+        lead = seed_lead(db_session)
+        response = client.get(f"/api/v1/prospects/{lead.prospect_id}")
+        assert response.status_code == 200
+        assert response.json()["lead_count"] >= 1
+
+    def test_list_prospect_leads_includes_archived(self, role_client, db_session) -> None:
+        from src.core.permissions import Role
+        from tst.shared.doc_fixtures import seed_lead
+
+        client, _ = role_client(Role.READONLY, email="readonly-prospect@firm.com")
+        lead = seed_lead(db_session, archived=True)
+        response = client.get(f"/api/v1/prospects/{lead.prospect_id}/leads")
+        assert response.status_code == 200
+        ids = {item["id"] for item in response.json()}
+        assert str(lead.id) in ids

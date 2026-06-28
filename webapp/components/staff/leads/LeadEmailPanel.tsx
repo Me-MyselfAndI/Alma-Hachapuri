@@ -5,7 +5,11 @@ import { useCallback, useEffect, useState, startTransition } from "react";
 
 import type { AccountMe, LeadRead } from "@/lib/types";
 import { formatStaffApiError, staffFetch } from "@/lib/staff-api";
-import { getPermissionMessage } from "@/lib/permission-messages";
+import { canWriteLeadScope } from "@/lib/access";
+import {
+  getPermissionMessage,
+  getSendEmailForbiddenMessage,
+} from "@/lib/permission-messages";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -91,7 +95,8 @@ function templateLabel(key: string | null): string | null {
 }
 
 export function LeadEmailPanel({ lead, user }: LeadEmailPanelProps) {
-  const canSend = user.permissions.includes("send_email");
+  const canSend =
+    user.permissions.includes("send_email") && canWriteLeadScope(user, lead);
   const mailpitUrl =
     process.env.NEXT_PUBLIC_MAILPIT_URL ?? "http://localhost:8025";
 
@@ -209,7 +214,7 @@ export function LeadEmailPanel({ lead, user }: LeadEmailPanelProps) {
 
     if (!result.ok) {
       if (result.status === 403) {
-        setError(getPermissionMessage("send_email"));
+        setError(getSendEmailForbiddenMessage(user, lead));
         return;
       }
       setError(formatStaffApiError(result.status, result.body));
@@ -219,7 +224,7 @@ export function LeadEmailPanel({ lead, user }: LeadEmailPanelProps) {
     setLastSent(result.data);
   };
 
-  if (!canSend) {
+  if (!user.permissions.includes("send_email")) {
     return (
       <Card>
         <CardHeader>
@@ -228,6 +233,21 @@ export function LeadEmailPanel({ lead, user }: LeadEmailPanelProps) {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             {getPermissionMessage("send_email")}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!canWriteLeadScope(user, lead)) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Send email</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {getSendEmailForbiddenMessage(user, lead)}
           </p>
         </CardContent>
       </Card>

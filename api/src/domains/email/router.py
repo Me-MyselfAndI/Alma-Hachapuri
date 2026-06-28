@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.core.deps import get_db, require_any_permission, require_permission
+from src.domains.account.models import Account
+from src.domains.email.models import EmailNotification
 from src.domains.email.preconditions import lead_emails_accessible
 from src.domains.email.schemas import (
     EmailNotificationRead,
@@ -28,6 +30,7 @@ from src.domains.email.schemas import (
 )
 from src.domains.email.service import EmailService
 from src.domains.lead.models import Lead
+from src.domains.lead.service import LeadService
 
 
 emails_router = APIRouter(prefix="/api/v1/emails", tags=["emails"])
@@ -68,8 +71,13 @@ def preview_staff_email(
     lead_id: UUID,
     body: EmailPreviewRequest,
     db: Session = Depends(get_db),
-    _account: Any = Depends(require_permission("send_email")),
+    account: Account = Depends(require_permission("send_email")),
 ) -> EmailPreviewResponse:
+    lead = db.get(Lead, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    LeadService._assert_write_scope(lead, account)
+
     subject, plain_body = EmailService.preview_staff_email(
         db, lead_id=lead_id, template=body.template
     )
@@ -86,8 +94,13 @@ def send_staff_email(
     lead_id: UUID,
     body: EmailSendRequest,
     db: Session = Depends(get_db),
-    _account: Any = Depends(require_permission("send_email")),
+    account: Account = Depends(require_permission("send_email")),
 ) -> EmailNotificationRead:
+    lead = db.get(Lead, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    LeadService._assert_write_scope(lead, account)
+
     notification = EmailService.send_template(
         db,
         lead_id=lead_id,
@@ -181,8 +194,20 @@ def get_email_notification(
 def retry_failed_email(
     email_id: UUID,
     db: Session = Depends(get_db),
-    _account: Any = Depends(require_permission("send_email")),
+    account: Account = Depends(require_permission("send_email")),
 ) -> EmailNotificationRead:
+    row = db.get(EmailNotification, email_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email notification not found",
+        )
+    if row.lead_id is not None:
+        lead = db.get(Lead, row.lead_id)
+        if lead is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+        LeadService._assert_write_scope(lead, account)
+
     notification = EmailService.retry_failed(db, email_id)
     db.commit()
     db.refresh(notification)

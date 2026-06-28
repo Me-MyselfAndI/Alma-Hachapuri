@@ -195,3 +195,20 @@ class TestRecordStateChange:
             is None
         )
         assert archived_at is not None  # precondition layer ignores archive flag
+
+
+class TestLeadStateHistoryRouteFailures:
+    """L7 HTTP — docs/entities/lead-state-history.md Preconditions."""
+
+    def test_state_history_404_missing_lead(self, client) -> None:
+        import uuid
+
+        response = client.get(f"/api/v1/leads/{uuid.uuid4()}/state-history")
+        assert response.status_code == 404
+
+    def test_state_history_200_for_archived_lead(self, client, db_session) -> None:
+        from tst.shared.doc_fixtures import seed_lead
+
+        lead = seed_lead(db_session, archived=True)
+        response = client.get(f"/api/v1/leads/{lead.id}/state-history")
+        assert response.status_code == 200

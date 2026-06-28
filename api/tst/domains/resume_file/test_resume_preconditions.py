@@ -141,3 +141,33 @@ class TestRetentionPolicy:
             )
             is True
         )
+
+
+class TestDownloadResumeRouteFailures:
+    """L5 HTTP — docs/entities/resume-file.md Preconditions."""
+
+    def test_download_404_missing_lead(self, client) -> None:
+        import uuid
+
+        response = client.get(f"/api/v1/leads/{uuid.uuid4()}/resume")
+        assert response.status_code == 404
+
+    def test_download_404_when_resume_row_missing(self, client, db_session) -> None:
+        from src.domains.resume_file.models import ResumeFile
+        from tst.shared.doc_fixtures import seed_lead
+
+        lead = seed_lead(db_session)
+        row = db_session.get(ResumeFile, lead.resume_file_id)
+        assert row is not None
+        db_session.delete(row)
+        db_session.commit()
+
+        response = client.get(f"/api/v1/leads/{lead.id}/resume")
+        assert response.status_code == 404
+
+    def test_download_not_403_for_archived_lead(self, client, db_session) -> None:
+        from tst.shared.doc_fixtures import seed_lead
+
+        lead = seed_lead(db_session, archived=True)
+        response = client.get(f"/api/v1/leads/{lead.id}/resume")
+        assert response.status_code != 403

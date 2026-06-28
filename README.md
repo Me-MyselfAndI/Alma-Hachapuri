@@ -51,7 +51,7 @@ This creates `api/.venv`, installs dependencies, and writes `.env` / `webapp/.en
 ### Start the app
 
 ```powershell
-python scripts/dev.py run --target both
+python scripts/dev.py run --target all
 ```
 
 Or: `npm run dev`
@@ -200,7 +200,7 @@ Use this to confirm everything works:
 
 | Problem | What to do |
 |---------|------------|
-| Docker / compose errors | Start Docker Desktop, wait until ready, run `python scripts/dev.py run --target both` again |
+| Docker / compose errors | Start Docker Desktop, wait until ready, run `python scripts/dev.py run --target all` again |
 | Port 3000 or 8000 in use | Stop other dev servers (`Ctrl+C` in old terminals); `netstat -ano \| findstr :8000` on Windows |
 | No verification email | Open Mailpit at http://localhost:8025; search by the email you typed in the form |
 | Login fails | Check http://localhost:8000/health shows `{"status":"ok"}`; restart the dev command |
@@ -214,7 +214,7 @@ More startup detail: [docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md)
 ## Daily use (after first setup)
 
 ```powershell
-python scripts/dev.py run --target both
+python scripts/dev.py run --target all
 ```
 
 No need to run `setup.py` again unless dependencies changed.

@@ -16,6 +16,7 @@ from src.domains.lead.models import Lead
 from src.domains.lead.preconditions import LeadState
 from src.domains.prospect.models import Prospect
 from src.domains.resume_file.models import ResumeFile
+from tst.shared.doc_fixtures import seed_lead as _seed_lead_any
 
 UTC = timezone.utc
 PDF_MIME = "application/pdf"
@@ -273,3 +274,69 @@ class TestExportRoute:
         assert "state_changed_at" in header
         assert "archived_at" in header
         assert response.headers.get("X-Export-Total-Count") == "1"
+
+
+class TestGetLeadFailures:
+    def test_get_lead_404_when_missing(self, client) -> None:
+        response = client.get(f"/api/v1/leads/{uuid.uuid4()}")
+        assert response.status_code == 404
+
+
+class TestVerifyLeadFailures:
+    def test_verify_get_400_missing_token(self, client) -> None:
+        response = client.get("/api/v1/leads/verify")
+        assert response.status_code == 400
+
+    def test_verify_get_404_unknown_token(self, client) -> None:
+        response = client.get("/api/v1/leads/verify?token=totally-unknown-token")
+        assert response.status_code == 404
+
+
+class TestUpdateLeadFailures:
+    def test_update_lead_404_when_missing(self, client) -> None:
+        response = client.patch(
+            f"/api/v1/leads/{uuid.uuid4()}",
+            json={"state": LeadState.REACHED_OUT.value},
+        )
+        assert response.status_code == 404
+
+    def test_update_lead_400_invalid_transition(self, client, db_session) -> None:
+        lead = _seed_lead_any(db_session)
+        response = client.patch(
+            f"/api/v1/leads/{lead.id}",
+            json={"state": LeadState.CLOSED.value},
+        )
+        assert response.status_code == 400
+
+    def test_attorney_patch_unassigned_lead_403(self, role_client, db_session) -> None:
+        _, owner = role_client(Role.ATTORNEY, email="patch-owner@firm.com")
+        client, _ = role_client(
+            Role.ATTORNEY,
+            email="patch-other@firm.com",
+            is_default_assignee=False,
+        )
+        lead = _seed_lead(db_session, assignee_id=owner.id)
+
+        response = client.patch(
+            f"/api/v1/leads/{lead.id}",
+            json={"state": LeadState.REACHED_OUT.value},
+        )
+        assert response.status_code == 403
+
+
+class TestArchiveLeadFailures:
+    def test_archive_lead_404_when_missing(self, client) -> None:
+        response = client.delete(f"/api/v1/leads/{uuid.uuid4()}")
+        assert response.status_code == 404
+
+    def test_attorney_archive_unassigned_lead_403(self, role_client, db_session) -> None:
+        _, owner = role_client(Role.ATTORNEY, email="arch-owner@firm.com")
+        client, _ = role_client(
+            Role.ATTORNEY,
+            email="arch-other@firm.com",
+            is_default_assignee=False,
+        )
+        lead = _seed_lead(db_session, assignee_id=owner.id)
+
+        response = client.delete(f"/api/v1/leads/{lead.id}")
+        assert response.status_code == 403

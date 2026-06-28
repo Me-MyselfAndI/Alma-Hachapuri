@@ -1,16 +1,22 @@
-"""Account domain precondition tests (F2.6).
+"""Account domain tests aligned with docs/entities/account.md Preconditions.
 
-Data/state rules only — permission checks are bypassed via the conftest
-``client`` fixture (see ``tests/conftest.py``).
+HTTP routes use the ``client`` fixture (admin, permissions bypassed) or
+``role_client`` for self-service (A7/A8). Service rules use ``db_session``.
 """
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
+from src.core.permissions import Role
+
 AUTH_TOKEN_PATH = "/api/v1/auth/token"
 ACCOUNTS_PATH = "/api/v1/accounts"
+AUTH_ME_PATH = "/api/v1/auth/me"
+AUTH_PASSWORD_PATH = "/api/v1/auth/me/password"
 
 
 def _login(client: TestClient, email: str, password: str):
@@ -325,3 +331,142 @@ class TestResolveIntakeAssignee:
 
         assert exc_info.value.status_code == 503
         assert "No active attorney" in exc_info.value.detail
+
+
+class TestGetAccountFailures:
+    """GetAccount (A5) — docs/entities/account.md Preconditions."""
+
+    def test_get_account_404_when_missing(self, client: TestClient) -> None:
+        response = client.get(f"{ACCOUNTS_PATH}/{uuid.uuid4()}")
+        assert response.status_code == 404
+
+    def test_get_account_422_malformed_uuid(self, client: TestClient) -> None:
+        response = client.get(f"{ACCOUNTS_PATH}/not-a-uuid")
+        assert response.status_code == 422
+
+
+class TestUpdateAccountFailures:
+    """UpdateAccount (A6)."""
+
+    def test_update_account_404_when_missing(self, client: TestClient) -> None:
+        response = client.patch(
+            f"{ACCOUNTS_PATH}/{uuid.uuid4()}",
+            json={"first_name": "Ghost"},
+        )
+        assert response.status_code == 404
+
+    def test_update_account_422_role_immutable(self, client: TestClient) -> None:
+        create = _create_account(
+            client,
+            {
+                "email": "immutable-role@firm.com",
+                "password": "secure-pass1",
+                "role": "readonly",
+                "first_name": "Read",
+                "last_name": "Only",
+            },
+        )
+        assert create.status_code == 201
+
+        response = client.patch(
+            f"{ACCOUNTS_PATH}/{create.json()['id']}",
+            json={"role": "admin"},
+        )
+        assert response.status_code == 422
+
+
+class TestCreateAccountValidationFailures:
+    def test_create_account_422_short_password(self, client: TestClient) -> None:
+        response = _create_account(
+            client,
+            {
+                "email": "short-pass@firm.com",
+                "password": "short",
+                "role": "readonly",
+                "first_name": "Short",
+                "last_name": "Pass",
+            },
+        )
+        assert response.status_code == 422
+
+
+class TestListAccountsFailures:
+    def test_list_accounts_422_invalid_page_size(self, client: TestClient) -> None:
+        response = client.get(f"{ACCOUNTS_PATH}?page_size=0")
+        assert response.status_code == 422
+
+
+class TestChangeOwnEmailFailures:
+    """ChangeOwnEmail (A7)."""
+
+    def test_change_own_email_401_wrong_password(self, role_client) -> None:
+        client, _ = role_client(
+            Role.READONLY,
+            email="self@firm.com",
+            password="correct-pass1",
+        )
+        response = client.patch(
+            AUTH_ME_PATH,
+            json={"email": "new@firm.com", "current_password": "wrong-pass1"},
+        )
+        assert response.status_code == 401
+
+    def test_change_own_email_409_duplicate(self, client: TestClient, role_client) -> None:
+        assert (
+            _create_account(
+                client,
+                {
+                    "email": "taken@firm.com",
+                    "password": "secure-pass1",
+                    "role": "readonly",
+                    "first_name": "Taken",
+                    "last_name": "Email",
+                },
+            ).status_code
+            == 201
+        )
+
+        me_client, _ = role_client(
+            Role.READONLY,
+            email="owner-self@firm.com",
+            password="owner-pass1",
+        )
+        response = me_client.patch(
+            AUTH_ME_PATH,
+            json={"email": "taken@firm.com", "current_password": "owner-pass1"},
+        )
+        assert response.status_code == 409
+
+
+class TestChangeOwnPasswordFailures:
+    """ChangeOwnPassword (A8)."""
+
+    def test_change_own_password_401_wrong_password(self, role_client) -> None:
+        client, _ = role_client(
+            Role.READONLY,
+            email="pwd-self@firm.com",
+            password="correct-pass1",
+        )
+        response = client.patch(
+            AUTH_PASSWORD_PATH,
+            json={
+                "current_password": "wrong-pass1",
+                "new_password": "new-pass1234",
+            },
+        )
+        assert response.status_code == 401
+
+    def test_change_own_password_422_too_short(self, role_client) -> None:
+        client, _ = role_client(
+            Role.READONLY,
+            email="pwd-short@firm.com",
+            password="correct-pass1",
+        )
+        response = client.patch(
+            AUTH_PASSWORD_PATH,
+            json={
+                "current_password": "correct-pass1",
+                "new_password": "short",
+            },
+        )
+        assert response.status_code == 422

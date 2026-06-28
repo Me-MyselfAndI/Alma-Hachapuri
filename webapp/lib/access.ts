@@ -14,6 +14,16 @@ export function canReassignLeads(user: AccountMe): boolean {
   return hasPermission(user, "assign_lead");
 }
 
+type LeadAssigneeRef = { assigned_account_id: string | null };
+
+/** Attorneys may only mutate or send email on leads assigned to them (F6.2). */
+export function canWriteLeadScope(user: AccountMe, lead: LeadAssigneeRef): boolean {
+  if (user.role !== "attorney") {
+    return true;
+  }
+  return lead.assigned_account_id === user.id;
+}
+
 type JwtPayload = {
   role?: string;
   permissions?: string[];

@@ -13,7 +13,7 @@ Or:
 
     npm start
 
-Equivalent to ``python scripts/dev.py run --target both`` (see ``npm run dev``).
+Equivalent to ``python scripts/dev.py run --target all`` (see ``npm run dev``).
 
 Requires: Docker Desktop, Python 3.11+, Node 18+. Run ``python scripts/setup.py``
 once if ``api/.venv`` or ``webapp/node_modules`` are missing.
@@ -38,7 +38,7 @@ def main() -> None:
     parser.add_argument("--no-install-check", action="store_true", help="Skip venv/npm presence check")
     args = parser.parse_args()
 
-    target = "api" if args.skip_webapp else "both"
+    target = "api" if args.skip_webapp else "all"
     cmd = [sys.executable, str(DEV), "run", "--target", target]
     if args.skip_docker:
         cmd.append("--skip-docker")

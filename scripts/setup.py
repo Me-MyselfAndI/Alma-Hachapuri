@@ -75,7 +75,7 @@ def main() -> None:
     npm = "npm.cmd" if sys.platform == "win32" else "npm"
     _run([npm, "install"], cwd=webapp)
 
-    print("\nSetup complete. Start the app with:  python scripts/dev.py run --target both")
+    print("\nSetup complete. Start the app with:  python scripts/dev.py run --target all")
 
 
 if __name__ == "__main__":

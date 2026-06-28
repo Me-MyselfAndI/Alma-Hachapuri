@@ -68,14 +68,14 @@ def _shutdown(_signum=None, _frame=None) -> None:
 def _ensure_run_prereqs(target: str, *, no_install_check: bool) -> None:
     if no_install_check:
         return
-    if target in ("api", "both"):
+    if target in ("api", "all"):
         if not (REPO_ROOT / "api" / ".venv").is_dir():
             print("Missing api/.venv — run:  python scripts/setup.py", file=sys.stderr)
             sys.exit(1)
         if shutil.which("docker") is None:
             print("docker not found on PATH — install Docker Desktop", file=sys.stderr)
             sys.exit(1)
-    if target in ("webapp", "both"):
+    if target in ("webapp", "all"):
         if shutil.which("npm") is None:
             print("npm not found on PATH — install Node.js", file=sys.stderr)
             sys.exit(1)
@@ -95,7 +95,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _shutdown)
 
-    if target in ("api", "both"):
+    if target in ("api", "all"):
         py = _api_python()
         if not args.skip_docker:
             _run(["docker", "compose", "up", "-d"], cwd=REPO_ROOT)
@@ -109,15 +109,15 @@ def cmd_run(args: argparse.Namespace) -> None:
             )
         )
 
-    if target in ("webapp", "both"):
+    if target in ("webapp", "all"):
         PROCS.append(_spawn([_npm_cmd(), "run", "dev"], cwd=REPO_ROOT / "webapp"))
 
     print()
     print("Running:")
-    if target in ("api", "both"):
+    if target in ("api", "all"):
         print("  API      http://localhost:8000  (docs: /docs)")
         print("  Mailpit  http://localhost:8025")
-    if target in ("webapp", "both"):
+    if target in ("webapp", "all"):
         print("  Webapp   http://localhost:3000")
     print("Press Ctrl+C to stop.\n")
 
@@ -186,9 +186,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p = sub.add_parser("run", help="Start dev processes")
     run_p.add_argument(
         "--target",
-        choices=("api", "webapp", "both"),
-        default="both",
-        help="Which stack to start (default: both)",
+        choices=("api", "webapp", "all"),
+        default="all",
+        help="Which stack to start (default: all)",
     )
     run_p.add_argument("--skip-docker", action="store_true", help="Do not run docker compose up")
     run_p.add_argument("--skip-migrate", action="store_true", help="Skip alembic upgrade head")

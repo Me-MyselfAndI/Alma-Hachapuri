@@ -36,16 +36,30 @@ export function getPermissionMessage(key: PermissionKey): string {
 const ATTORNEY_SCOPE_MESSAGE =
   "You can only update leads assigned to you.";
 
+function isAttorneyOutOfAssigneeScope(user: AccountMe, lead: LeadRead): boolean {
+  return (
+    user.role === "attorney" &&
+    lead.assigned_account_id !== null &&
+    lead.assigned_account_id !== user.id
+  );
+}
+
 export function getTransitionForbiddenMessage(
   user: AccountMe,
   lead: LeadRead,
 ): string {
-  if (
-    user.role === "attorney" &&
-    lead.assigned_account_id !== null &&
-    lead.assigned_account_id !== user.id
-  ) {
+  if (isAttorneyOutOfAssigneeScope(user, lead)) {
     return ATTORNEY_SCOPE_MESSAGE;
   }
   return getPermissionMessage("write_lead");
+}
+
+export function getSendEmailForbiddenMessage(
+  user: AccountMe,
+  lead: LeadRead,
+): string {
+  if (isAttorneyOutOfAssigneeScope(user, lead)) {
+    return ATTORNEY_SCOPE_MESSAGE;
+  }
+  return getPermissionMessage("send_email");
 }
